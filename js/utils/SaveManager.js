@@ -1,5 +1,5 @@
 const SAVE_VERSION = '3.0.0';
-const STORAGE_KEY = 'stellar_salvage_save';
+const STORAGE_KEY = 'singularity_rush_save';
 
 export class SaveManager {
   constructor(gameState) {

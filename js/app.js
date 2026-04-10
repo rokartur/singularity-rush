@@ -237,7 +237,7 @@ window.gameUI = {
 
   resetGame() {
     if (confirm('Are you sure? This will delete all progress!')) {
-      localStorage.removeItem('stellar_salvage_save');
+      localStorage.removeItem('singularity_rush_save');
       location.reload();
     }
   }

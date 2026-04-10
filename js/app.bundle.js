@@ -1073,7 +1073,7 @@
 
   // js/utils/SaveManager.js
   var SAVE_VERSION = "3.0.0";
-  var STORAGE_KEY = "stellar_salvage_save";
+  var STORAGE_KEY = "singularity_rush_save";
   var SaveManager = class {
     constructor(gameState) {
       this.gs = gameState;
@@ -2585,7 +2585,7 @@
     },
     resetGame() {
       if (confirm("Are you sure? This will delete all progress!")) {
-        localStorage.removeItem("stellar_salvage_save");
+        localStorage.removeItem("singularity_rush_save");
         location.reload();
       }
     }
