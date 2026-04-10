@@ -1,0 +1,12 @@
+[
+  { "id": "cargo_expander", "name": "Cargo Expander", "rarity": "common", "effect": { "type": "cargo_capacity", "value": 1.2 }, "desc": "+20% pojemność ładowni", "cost": 100 },
+  { "id": "shield_gen", "name": "Shield Generator", "rarity": "common", "effect": { "type": "shield", "value": 50 }, "desc": "+50 tarczy", "cost": 120 },
+  { "id": "auto_collector", "name": "Auto-Collector", "rarity": "uncommon", "effect": { "type": "auto_collect", "value": 1 }, "desc": "Automatycznie zbiera surowce", "cost": 300 },
+  { "id": "crit_amp", "name": "Crit Amplifier", "rarity": "uncommon", "effect": { "type": "crit_chance", "value": 0.05 }, "desc": "+5% szansy na critical hit", "cost": 350 },
+  { "id": "combo_counter", "name": "Combo Counter", "rarity": "rare", "effect": { "type": "combo_bonus", "value": 0.1 }, "desc": "Szybkie kliknięcia stackują bonus", "cost": 800 },
+  { "id": "quantum_scanner", "name": "Quantum Scanner", "rarity": "rare", "effect": { "type": "hidden_deposits", "value": 1 }, "desc": "Pokazuje ukryte złoża", "cost": 900 },
+  { "id": "dark_matter_core", "name": "Dark Matter Core", "rarity": "epic", "effect": { "type": "boss_damage", "value": 1.0 }, "desc": "+100% damage na bossach", "cost": 3000 },
+  { "id": "temporal_flux", "name": "Temporal Flux", "rarity": "epic", "effect": { "type": "boss_timer_slow", "value": 0.7 }, "desc": "Spowalnia timer bossa o 30%", "cost": 3500 },
+  { "id": "cosmic_resonance", "name": "Cosmic Resonance", "rarity": "legendary", "effect": { "type": "all_mult", "value": 1.15 }, "desc": "Wszystkie multiplikatory +15%", "cost": 15000 },
+  { "id": "the_anomaly", "name": "The Anomaly", "rarity": "legendary", "effect": { "type": "random_power", "value": 60 }, "desc": "Losowy potężny efekt co 60s", "cost": 20000 }
+]

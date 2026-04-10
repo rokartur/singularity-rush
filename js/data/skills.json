@@ -1,0 +1,91 @@
+{
+  "branches": [
+    {
+      "id": "laser",
+      "name": "Laser",
+      "icon": "📡",
+      "color": "#fe5f55",
+      "nodes": [
+        { "id": "l_speed_1", "name": "Szybkość Lasera I", "maxLevel": 10, "cost": 1, "costScale": 1.5, "effect": { "type": "click_speed", "value": 0.05 }, "desc": "+5% szybkość/lvl", "requires": [] },
+        { "id": "l_power_1", "name": "Moc Lasera I", "maxLevel": 10, "cost": 1, "costScale": 1.5, "effect": { "type": "damage", "value": 0.1 }, "desc": "+10% damage/lvl", "requires": [] },
+        { "id": "l_range_1", "name": "Zasięg Lasera", "maxLevel": 5, "cost": 2, "costScale": 1.6, "effect": { "type": "range", "value": 0.08 }, "desc": "+8% zasięg/lvl", "requires": ["l_power_1"] },
+        { "id": "l_continuous", "name": "Laser Ciągły", "maxLevel": 1, "cost": 5, "effect": { "type": "hold_fire", "value": 1 }, "desc": "Hold-to-fire", "requires": ["l_speed_1"] },
+        { "id": "l_pulse", "name": "Laser Pulsacyjny", "maxLevel": 1, "cost": 5, "effect": { "type": "burst_damage", "value": 2.5 }, "desc": "Burst damage", "requires": ["l_power_1", "l_range_1"] },
+        { "id": "l_split", "name": "Laser Rozszczepiony", "maxLevel": 3, "cost": 4, "costScale": 2, "effect": { "type": "multi_target", "value": 1 }, "desc": "+1 target/lvl", "requires": ["l_range_1"] },
+        { "id": "l_speed_2", "name": "Szybkość Lasera II", "maxLevel": 10, "cost": 3, "costScale": 1.8, "effect": { "type": "click_speed", "value": 0.07 }, "desc": "+7% szybkość/lvl", "requires": ["l_continuous"] },
+        { "id": "l_power_2", "name": "Moc Lasera II", "maxLevel": 10, "cost": 3, "costScale": 1.8, "effect": { "type": "damage", "value": 0.15 }, "desc": "+15% damage/lvl", "requires": ["l_pulse"] },
+        { "id": "l_beam_frenzy", "name": "Beam Frenzy", "maxLevel": 1, "cost": 10, "effect": { "type": "ramping_speed", "value": 0.02 }, "desc": "Szybkość rośnie z czasem", "requires": ["l_speed_2"] },
+        { "id": "l_piercing", "name": "Piercing Laser", "maxLevel": 1, "cost": 12, "effect": { "type": "pierce", "value": 1 }, "desc": "Przebija przez cele", "requires": ["l_power_2"] },
+        { "id": "l_singularity", "name": "Singularity Beam", "maxLevel": 1, "cost": 20, "effect": { "type": "instant_kill_chance", "value": 0.01 }, "desc": "Chance na instant-kill", "requires": ["l_beam_frenzy", "l_piercing"] }
+      ]
+    },
+    {
+      "id": "automation",
+      "name": "Automacja",
+      "icon": "⚙️",
+      "color": "#50c878",
+      "nodes": [
+        { "id": "a_mine_drone", "name": "Dron Wydobywczy", "maxLevel": 10, "cost": 2, "costScale": 1.6, "effect": { "type": "auto_mine_dps", "value": 0.1 }, "desc": "+10% auto DPS/lvl", "requires": [] },
+        { "id": "a_collect_drone", "name": "Dron Zbierający", "maxLevel": 5, "cost": 2, "costScale": 1.5, "effect": { "type": "auto_collect_range", "value": 0.15 }, "desc": "+15% collect range/lvl", "requires": [] },
+        { "id": "a_repair_drone", "name": "Dron Naprawczy", "maxLevel": 5, "cost": 3, "costScale": 1.5, "effect": { "type": "auto_repair", "value": 0.02 }, "desc": "+2% HP regen/lvl", "requires": [] },
+        { "id": "a_speed_drone", "name": "Dron Śmigłowy", "maxLevel": 5, "cost": 4, "costScale": 1.8, "effect": { "type": "drone_speed_mult", "value": 0.3 }, "desc": "+30% drone speed/lvl", "requires": ["a_mine_drone"] },
+        { "id": "a_swarm", "name": "Swarm Protocol", "maxLevel": 3, "cost": 6, "costScale": 2, "effect": { "type": "drone_count", "value": 1 }, "desc": "+1 drone/lvl", "requires": ["a_mine_drone"] },
+        { "id": "a_quantum_link", "name": "Quantum Link", "maxLevel": 1, "cost": 8, "effect": { "type": "drone_synergy", "value": 0.1 }, "desc": "Drony dzielą się statami", "requires": ["a_speed_drone", "a_swarm"] },
+        { "id": "a_auto_target", "name": "Auto-Targeting", "maxLevel": 3, "cost": 5, "costScale": 2, "effect": { "type": "target_priority", "value": 0.15 }, "desc": "Lepsze targetowanie/lvl", "requires": ["a_quantum_link"] },
+        { "id": "a_auto_craft", "name": "Auto-Crafting", "maxLevel": 1, "cost": 10, "effect": { "type": "auto_forge", "value": 1 }, "desc": "Automatyczna produkcja", "requires": ["a_quantum_link"] },
+        { "id": "a_self_replicate", "name": "Self-Replicating", "maxLevel": 1, "cost": 18, "effect": { "type": "drone_replicate", "value": 0.01 }, "desc": "Drony klonują się", "requires": ["a_auto_target", "a_auto_craft"] }
+      ]
+    },
+    {
+      "id": "forge",
+      "name": "Forge",
+      "icon": "🔨",
+      "color": "#f0c040",
+      "nodes": [
+        { "id": "f_improved_laser", "name": "Ulepszone Lasery", "maxLevel": 5, "cost": 2, "costScale": 1.5, "effect": { "type": "craft_laser_discount", "value": 0.1 }, "desc": "-10% craft cost/lvl", "requires": [] },
+        { "id": "f_modules", "name": "Moduły", "maxLevel": 3, "cost": 3, "costScale": 1.6, "effect": { "type": "module_slots", "value": 1 }, "desc": "+1 slot equipmentu/lvl", "requires": [] },
+        { "id": "f_refine", "name": "Raffinacja", "maxLevel": 5, "cost": 2, "costScale": 1.5, "effect": { "type": "refine_bonus", "value": 0.1 }, "desc": "+10% jakość surowców/lvl", "requires": [] },
+        { "id": "f_nano_forge", "name": "Nano-Forge", "maxLevel": 3, "cost": 5, "costScale": 2, "effect": { "type": "passive_forge", "value": 0.1 }, "desc": "Forge produkuje pasywnie", "requires": ["f_improved_laser"] },
+        { "id": "f_recycle", "name": "Recykling", "maxLevel": 1, "cost": 6, "effect": { "type": "recycle", "value": 0.5 }, "desc": "50% zwrot przy dismantle", "requires": ["f_refine"] },
+        { "id": "f_alchemy", "name": "Alchemia Kosmiczna", "maxLevel": 3, "cost": 4, "costScale": 2, "effect": { "type": "transmute", "value": 0.1 }, "desc": "+10% szansy na transmutację", "requires": ["f_refine", "f_nano_forge"] },
+        { "id": "f_relic_craft", "name": "Relikt Crafting", "maxLevel": 1, "cost": 12, "effect": { "type": "relic_unlock", "value": 1 }, "desc": "Odblokuj legendarny gear", "requires": ["f_nano_forge"] },
+        { "id": "f_mass_production", "name": "Mass Production", "maxLevel": 3, "cost": 6, "costScale": 2, "effect": { "type": "bulk_bonus", "value": 0.15 }, "desc": "+15% bulk crafting bonus/lvl", "requires": ["f_relic_craft"] },
+        { "id": "f_cosmic_forge", "name": "Cosmic Forging", "maxLevel": 1, "cost": 20, "effect": { "type": "perfect_item_chance", "value": 0.1 }, "desc": "10% szansa na perfekt item", "requires": ["f_mass_production"] }
+      ]
+    },
+    {
+      "id": "economy",
+      "name": "Ekonomia",
+      "icon": "💰",
+      "color": "#009dff",
+      "nodes": [
+        { "id": "e_better_prices", "name": "Lepsze Ceny", "maxLevel": 10, "cost": 1, "costScale": 1.4, "effect": { "type": "sell_price", "value": 0.05 }, "desc": "+5% sell price/lvl", "requires": [] },
+        { "id": "e_discounts", "name": "Rabaty Sklepowe", "maxLevel": 10, "cost": 1, "costScale": 1.4, "effect": { "type": "buy_discount", "value": 0.05 }, "desc": "-5% buy cost/lvl", "requires": [] },
+        { "id": "e_passive_income", "name": "Kredytowe Bonusy", "maxLevel": 5, "cost": 2, "costScale": 1.6, "effect": { "type": "passive_credits", "value": 0.1 }, "desc": "+10% passive income/lvl", "requires": [] },
+        { "id": "e_black_market", "name": "Black Market", "maxLevel": 1, "cost": 6, "effect": { "type": "black_market", "value": 1 }, "desc": "Rzadkie itemy losowo", "requires": ["e_better_prices"] },
+        { "id": "e_exchange", "name": "Giełda", "maxLevel": 3, "cost": 5, "costScale": 2, "effect": { "type": "dynamic_prices", "value": 0.1 }, "desc": "Ceny zmieniają się dynamicznie", "requires": ["e_discounts"] },
+        { "id": "e_investments", "name": "Pasywne Inwestycje", "maxLevel": 5, "cost": 4, "costScale": 1.8, "effect": { "type": "credit_interest", "value": 0.02 }, "desc": "+2% interest/lvl", "requires": ["e_passive_income"] },
+        { "id": "e_monopoly", "name": "Monopol", "maxLevel": 3, "cost": 8, "costScale": 2, "effect": { "type": "sell_stacking", "value": 0.05 }, "desc": "Stacking sell bonuses", "requires": ["e_black_market"] },
+        { "id": "e_sale_combo", "name": "Bonusy za Sale", "maxLevel": 3, "cost": 6, "costScale": 2, "effect": { "type": "sell_combo", "value": 0.1 }, "desc": "Combo selling bonus", "requires": ["e_exchange"] },
+        { "id": "e_galactic_bank", "name": "Galactic Bank", "maxLevel": 1, "cost": 15, "effect": { "type": "massive_passive_credits", "value": 0.5 }, "desc": "Ogromny passive income", "requires": ["e_investments", "e_monopoly"] }
+      ]
+    },
+    {
+      "id": "defense",
+      "name": "Obrona",
+      "icon": "🛡️",
+      "color": "#9b59b6",
+      "nodes": [
+        { "id": "d_hp_base", "name": "HP Baza", "maxLevel": 10, "cost": 1, "costScale": 1.5, "effect": { "type": "max_hp", "value": 0.1 }, "desc": "+10% HP/lvl", "requires": [] },
+        { "id": "d_shield", "name": "Tarcza Energetyczna", "maxLevel": 10, "cost": 2, "costScale": 1.5, "effect": { "type": "shield", "value": 0.05 }, "desc": "+5% damage reduction/lvl", "requires": [] },
+        { "id": "d_repair_bot", "name": "Repair Bot", "maxLevel": 5, "cost": 2, "costScale": 1.6, "effect": { "type": "passive_regen", "value": 0.01 }, "desc": "+1% HP regen/lvl", "requires": [] },
+        { "id": "d_phase_shield", "name": "Phase Shield", "maxLevel": 5, "cost": 4, "costScale": 1.8, "effect": { "type": "dodge_chance", "value": 0.04 }, "desc": "+4% dodge/lvl", "requires": ["d_shield"] },
+        { "id": "d_reflect", "name": "Reflect", "maxLevel": 3, "cost": 5, "costScale": 2, "effect": { "type": "reflect", "value": 0.1 }, "desc": "Odbijanie 10% damage/lvl", "requires": ["d_shield"] },
+        { "id": "d_emergency", "name": "Emergency Protocol", "maxLevel": 1, "cost": 7, "effect": { "type": "auto_heal", "value": 0.3 }, "desc": "Auto-heal przy low HP", "requires": ["d_repair_bot"] },
+        { "id": "d_immortality", "name": "Immortality Protocol", "maxLevel": 1, "cost": 12, "effect": { "type": "survive_1hp", "value": 1 }, "desc": "1HP survive (cooldown)", "requires": ["d_phase_shield", "d_emergency"] },
+        { "id": "d_quantum_shield", "name": "Quantum Shield", "maxLevel": 3, "cost": 8, "costScale": 2.5, "effect": { "type": "max_damage_absorb", "value": 0.05 }, "desc": "Absorbuje % max damage/lvl", "requires": ["d_immortality"] },
+        { "id": "d_last_stand", "name": "Last Stand", "maxLevel": 1, "cost": 18, "effect": { "type": "low_hp_damage", "value": 2.0 }, "desc": "Niższe HP = większy damage", "requires": ["d_quantum_shield"] }
+      ]
+    }
+  ]
+}

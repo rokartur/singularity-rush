@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stellar Salvage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+  <style>
+    body { margin: 0; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="crt-overlay"></div>
+
+  <div id="game-wrapper">
+    <div id="top-bar">
+      <div class="stat">
+        <span class="stat-label">LVL</span>
+        <span class="stat-value green glow" id="ui-level">1</span>
+      </div>
+      <div id="xp-bar-container"><div id="ui-xp-fill"></div></div>
+      <div class="stat">
+        <span class="stat-label">HP</span>
+        <div id="hp-bar-container" style="position:relative;">
+          <div id="ui-hp-fill"></div>
+          <div id="ui-shield-fill" style="position:absolute; top:0; left:0; height:100%; background:var(--blue); opacity:0.6; width:0%; pointer-events:none; transition:width 0.2s;"></div>
+          <span id="ui-hp-text" style="position:relative; z-index:1;">100/100</span>
+        </div>
+      </div>
+      <div class="stat sector-stat">
+        <span class="stat-label">Galaxy</span>
+        <span class="stat-value blue" id="ui-galaxy">1</span>
+        <span class="sector-name" id="ui-galaxy-name">SEKTOR 1</span>
+      </div>
+    </div>
+
+    <div id="main-area">
+      <div id="tab-game" class="tab-content">
+        <div id="left-panel">
+          <div>
+            <h3>Resources</h3>
+            <div id="ui-resources"></div>
+          </div>
+          <div>
+            <h3>Rig</h3>
+            <div id="ui-equipment" class="equipment-name">SOL DRIFT // RUN 15s</div>
+          </div>
+          <div>
+            <h3>Damage</h3>
+            <div class="dmg-display">
+              <div class="click-dmg-label">CLICK DMG</div>
+              <div id="ui-click-dmg" class="click-dmg-value">15</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="canvas-container">
+          <canvas id="game-canvas"></canvas>
+
+          <div id="expedition-timer" style="display:none;">
+            <span id="expedition-time" class="expedition-time-text">15s</span>
+          </div>
+
+          <div id="boss-progress">
+            <div id="boss-progress-bar"><div id="boss-progress-fill"></div></div>
+            <span id="boss-progress-text">0%</span>
+          </div>
+
+          <div id="boss-bar">
+            <div style="font-size:11px; color:var(--red); font-weight:bold;" id="boss-name">BOSS</div>
+            <div id="boss-hp-bar"><div id="boss-hp-fill"></div></div>
+            <span id="boss-hp-text"></span>
+          </div>
+
+          <div id="combo-display">
+            <div id="ui-combo-count"></div>
+            <div id="ui-combo-mult"></div>
+            <div id="combo-bar-wrap"><div id="ui-combo-bar"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-skills" class="tab-content active">
+        <div id="skill-tree-shell"></div>
+      </div>
+
+      <div id="tab-map" class="tab-content">
+        <div class="panel-content">
+          <div class="panel-title">Galaxy Map</div>
+          <div class="map-note">Nowe galaktyki odblokowujesz resource'ami zdobytymi w poprzednich wyprawach.</div>
+          <div class="map-galaxies" id="map-galaxies"></div>
+        </div>
+      </div>
+
+      <div id="tab-stats" class="tab-content">
+        <div class="panel-content">
+          <div class="panel-title">Statistics</div>
+          <div id="stats-content"></div>
+        </div>
+      </div>
+
+      <div id="tab-settings" class="tab-content">
+        <div class="panel-content">
+          <div class="panel-title">Settings</div>
+          <div class="settings-row">
+            <span class="settings-label">Export Save</span>
+            <button class="settings-btn" onclick="gameUI.exportSave()">Export</button>
+          </div>
+          <textarea class="export-area" id="export-textarea" readonly style="display:none;"></textarea>
+          <div class="settings-row">
+            <span class="settings-label">Import Save</span>
+            <button class="settings-btn" onclick="gameUI.showImport()">Import</button>
+          </div>
+          <textarea class="export-area" id="import-textarea" placeholder="Paste save here..." style="display:none;"></textarea>
+          <div class="settings-row" id="import-confirm-row" style="display:none;">
+            <span></span>
+            <button class="settings-btn" onclick="gameUI.importSave()" style="border-color:var(--green); color:var(--green);">Confirm Import</button>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Reset All</span>
+            <button class="settings-btn" style="border-color:var(--red); color:var(--red);" onclick="gameUI.resetGame()">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button id="btn-start-expedition" class="start-expedition-btn persistent-start-btn" onclick="gameUI.startExpedition()">
+      START
+    </button>
+
+    <div id="bottom-bar">
+      <button class="menu-btn active" id="btn-game" onclick="gameUI.switchTab('game')">GAME</button>
+      <button class="menu-btn" id="btn-skills" onclick="gameUI.switchTab('skills')">SKILL TREE</button>
+      <button class="menu-btn" id="btn-map" onclick="gameUI.switchTab('map')">GALAXY MAP</button>
+      <button class="menu-btn" id="btn-stats" onclick="gameUI.switchTab('stats')">STATS</button>
+      <button class="menu-btn" id="btn-settings" onclick="gameUI.switchTab('settings')">SETTINGS</button>
+    </div>
+  </div>
+
+  <div class="overlay-panel" id="run-summary">
+    <div class="panel-content">
+      <div class="panel-title">Salvage Complete</div>
+      <div id="run-summary-content"></div>
+      <button class="start-expedition-btn" style="margin-top:24px; width:100%;" onclick="gameUI.closeRunSummary()">CONTINUE</button>
+    </div>
+  </div>
+
+  <div id="pause-overlay">
+    <div class="panel-title glow">PAUSED</div>
+    <div style="color:var(--text-dim); font-size:12px;">Press ESC to resume</div>
+  </div>
+
+  <script defer src="js/app.bundle.js"></script>
+</body>
+</html>
+

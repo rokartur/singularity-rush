@@ -1,0 +1,20 @@
+[
+  { "id": "meteorite_chunk", "name": "Kawałek Meteorytu", "rarity": "common", "desc": "+5% damage", "effect": { "type": "damage", "value": 1.05 } },
+  { "id": "moon_shard", "name": "Odłamek Księżyca", "rarity": "common", "desc": "+10% HP", "effect": { "type": "max_hp", "value": 1.1 } },
+  { "id": "cosmic_rust", "name": "Rdza Kosmiczna", "rarity": "common", "desc": "+3% auto-mine speed", "effect": { "type": "auto_mine_speed", "value": 1.03 } },
+  { "id": "star_dust", "name": "Gwiezdny Pył", "rarity": "common", "desc": "+5% do surowców", "effect": { "type": "resource_mult", "value": 1.05 } },
+  { "id": "ice_crystal", "name": "Kryształ Lodu Kosmicznego", "rarity": "uncommon", "desc": "Kliknięcia generują dodatkowo 5% surowców", "effect": { "type": "click_resource_bonus", "value": 0.05 } },
+  { "id": "nebula_fragment", "name": "Fragment Nebuli", "rarity": "uncommon", "desc": "+15% do wszystkich rzadkich dropów", "effect": { "type": "rare_drop", "value": 1.15 } },
+  { "id": "saturn_ring", "name": "Pierścień Saturna", "rarity": "uncommon", "desc": "Po 50 kliknięciach w ciąg, +100% na 5s", "effect": { "type": "combo_surge", "value": 50, "bonus": 2.0, "duration": 5 } },
+  { "id": "comet_tail", "name": "Ogon Komety", "rarity": "uncommon", "desc": "+8% szybkość poruszania się dronów", "effect": { "type": "drone_speed", "value": 1.08 } },
+  { "id": "pulsar_heart", "name": "Serce Pulsara", "rarity": "rare", "desc": "Każdy critical hit leczy 2% HP", "effect": { "type": "crit_heal", "value": 0.02 } },
+  { "id": "white_dwarf_core", "name": "Rdzeń Białego Karła", "rarity": "rare", "desc": "Forge items są 25% lepsze", "effect": { "type": "forge_quality", "value": 1.25 } },
+  { "id": "black_hole_eye", "name": "Oko Czarnej Dziury", "rarity": "rare", "desc": "5% szansa na podwójne nagrody z bossów", "effect": { "type": "boss_double_reward", "value": 0.05 } },
+  { "id": "solar_flare", "name": "Solar Flare", "rarity": "rare", "desc": "+20% AoE damage", "effect": { "type": "aoe_damage", "value": 1.2 } },
+  { "id": "quantum_matrix", "name": "Matryca Kwantowa", "rarity": "epic", "desc": "Talent cards mają dodatkowy wybór (+1 karta)", "effect": { "type": "extra_talent_choice", "value": 1 } },
+  { "id": "dark_matter_threads", "name": "Nici Ciemnej Materii", "rarity": "epic", "desc": "Multiplikatory działają na siebie kwadratowo", "effect": { "type": "quadratic_mult", "value": 1 } },
+  { "id": "supernova_echo", "name": "Echo Supernovej", "rarity": "epic", "desc": "Po zabiciu bossa, 30s doubled DPS", "effect": { "type": "boss_kill_buff", "value": 2.0, "duration": 30 } },
+  { "id": "first_photon", "name": "Pierwszy Foton", "rarity": "legendary", "desc": "Permanent +1% do wszystkich statów co godzinę gry", "effect": { "type": "scaling_all_stats", "value": 0.01 } },
+  { "id": "universe_key", "name": "Klucz do Wszechświata", "rarity": "legendary", "desc": "Odblokowuje ukryty 8. system", "effect": { "type": "unlock_secret", "value": 1 } },
+  { "id": "herschel_infinity", "name": "Nieskończoność Herschela", "rarity": "legendary", "desc": "Nie ma limitu poziomu (soft cap removed)", "effect": { "type": "remove_softcap", "value": 1 } }
+]

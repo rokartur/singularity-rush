@@ -1,0 +1,22 @@
+[
+  { "id": "fast_finger", "name": "Szybki Palec", "rarity": "common", "desc": "+15% szybkość kliknięcia", "effect": { "type": "click_speed", "value": 1.15 } },
+  { "id": "thick_laser", "name": "Gruby Laser", "rarity": "common", "desc": "+25% bazowe obrażenia lasera", "effect": { "type": "base_damage", "value": 1.25 } },
+  { "id": "collector", "name": "Kolektor", "rarity": "common", "desc": "+20% szansy na bonus surowce", "effect": { "type": "bonus_resource_chance", "value": 0.2 } },
+  { "id": "resource_hound", "name": "Pies Surowcowy", "rarity": "common", "desc": "+10% do wszystkich surowców", "effect": { "type": "resource_mult", "value": 1.1 } },
+  { "id": "steady_hand", "name": "Pewna Ręka", "rarity": "common", "desc": "+10% szansy na crit", "effect": { "type": "crit_chance", "value": 0.1 } },
+  { "id": "automaton", "name": "Automatyk", "rarity": "uncommon", "desc": "Auto-mine co 2s (słaby)", "effect": { "type": "auto_mine", "value": 0.5, "interval": 2 } },
+  { "id": "critical_shot", "name": "Krytyczny Strzał", "rarity": "uncommon", "desc": "10% szansa na 3x damage", "effect": { "type": "crit_mult_chance", "value": 0.1, "mult": 3 } },
+  { "id": "bounty_hunter", "name": "Łowca Nagród", "rarity": "uncommon", "desc": "+50% kredytów z bossów", "effect": { "type": "boss_credits", "value": 1.5 } },
+  { "id": "lucky_spark", "name": "Szczęśliwa Iskra", "rarity": "uncommon", "desc": "+15% do rzadkich dropów", "effect": { "type": "rare_drop_chance", "value": 0.15 } },
+  { "id": "shield_mastery", "name": "Mistrz Tarczy", "rarity": "uncommon", "desc": "+30% efektywności tarczy", "effect": { "type": "shield_eff", "value": 1.3 } },
+  { "id": "engineer", "name": "Inżynier", "rarity": "rare", "desc": "Forge items 20% tańsze", "effect": { "type": "forge_discount", "value": 0.8 } },
+  { "id": "lucky_draw", "name": "Szczęściarz", "rarity": "rare", "desc": "+1 losowa karta talentu", "effect": { "type": "extra_talent_card", "value": 1 } },
+  { "id": "entropy_mult", "name": "Mnożnik Entropii", "rarity": "rare", "desc": "Multiplikatory działają 1.5x mocniej", "effect": { "type": "mult_amplifier", "value": 1.5 } },
+  { "id": "combo_master", "name": "Mistrz Combo", "rarity": "rare", "desc": "Combo degraduje 50% wolniej", "effect": { "type": "combo_decay_slow", "value": 0.5 } },
+  { "id": "asteroid_whisperer", "name": "Szepty Asteroid", "rarity": "rare", "desc": "Widzi HP asteroid jako liczby", "effect": { "type": "show_asteroid_hp", "value": 1 } },
+  { "id": "reincarnation", "name": "Reinkarnacja", "rarity": "epic", "desc": "Przy śmierci odrodzenie z 50% HP", "effect": { "type": "reincarnate", "value": 0.5 } },
+  { "id": "singularity_tap", "name": "Singularity Tap", "rarity": "epic", "desc": "Każde 100 kliknięć = massive bonus", "effect": { "type": "click_milestone", "value": 100, "bonus_mult": 5 } },
+  { "id": "quantum_leap", "name": "Quantum Leap", "rarity": "epic", "desc": "Co 60s automatyczny mega-crit", "effect": { "type": "timed_mega_crit", "value": 60 } },
+  { "id": "time_loop", "name": "Czas Pętli", "rarity": "legendary", "desc": "Reset timerów bossa o 30s", "effect": { "type": "boss_timer_reset", "value": 30 } },
+  { "id": "infinity", "name": "Nieskończoność", "rarity": "legendary", "desc": "DPS rośnie o 1% co minutę", "effect": { "type": "scaling_dps", "value": 0.01 } }
+]

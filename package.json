@@ -1,0 +1,15 @@
+{
+  "name": "stellar-salvage",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild js/app.js --bundle --format=iife --platform=browser --target=es2020 --outfile=js/app.bundle.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.7",
+    "jsdom": "^26.1.0",
+    "vitest": "^3.2.4"
+  }
+}

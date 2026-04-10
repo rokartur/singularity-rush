@@ -1,0 +1,79 @@
+[
+  {
+    "id": "mining_laser_mk1",
+    "name": "Mining Laser Mk.I",
+    "tier": 1,
+    "baseDPS": 10,
+    "baseClickDamage": 5,
+    "description": "Podstawowy laser wydobywczy. Nic specjalnego, ale działa.",
+    "equipBonus": { "type": "resource_mult", "value": 1.05, "desc": "+5% do surowców" },
+    "craftCost": { "iron": 50, "nickel": 20 },
+    "unlockGalaxy": 0
+  },
+  {
+    "id": "pulse_beam",
+    "name": "Pulse Beam",
+    "tier": 2,
+    "baseDPS": 35,
+    "baseClickDamage": 18,
+    "description": "Impulsowy laser o podwójnej mocy.",
+    "equipBonus": { "type": "double_hit_chance", "value": 0.1, "desc": "10% szansy na podwójne trafienie" },
+    "craftCost": { "iron": 200, "nickel": 100, "helium3": 30 },
+    "unlockGalaxy": 1
+  },
+  {
+    "id": "plasma_cutter",
+    "name": "Plasma Cutter",
+    "tier": 3,
+    "baseDPS": 100,
+    "baseClickDamage": 55,
+    "description": "Cięcie plazmowe ignorujące pancerz asteroid.",
+    "equipBonus": { "type": "armor_pen", "value": 0.2, "desc": "Ignoruje 20% armor" },
+    "craftCost": { "helium3": 80, "star_crystal": 40, "antimatter": 10 },
+    "unlockGalaxy": 2
+  },
+  {
+    "id": "antimatter_ray",
+    "name": "Antimatter Ray",
+    "tier": 4,
+    "baseDPS": 350,
+    "baseClickDamage": 180,
+    "description": "Promień antymaterii łączący się z pobliskimi celami.",
+    "equipBonus": { "type": "chain", "value": 2, "desc": "Chain do 2 pobliskich asteroid" },
+    "craftCost": { "antimatter": 50, "degenerate": 25, "dark_matter": 10 },
+    "unlockGalaxy": 3
+  },
+  {
+    "id": "quantum_drill",
+    "name": "Quantum Drill",
+    "tier": 5,
+    "baseDPS": 1200,
+    "baseClickDamage": 600,
+    "description": "Wiertło kwantowe tunelujące przez materię.",
+    "equipBonus": { "type": "instant_mine_chance", "value": 0.05, "desc": "5% szansy na instant-mine małych asteroid" },
+    "craftCost": { "dark_matter": 30, "exotic_particle": 15, "neutrino_quartz": 8 },
+    "unlockGalaxy": 4
+  },
+  {
+    "id": "nova_beam",
+    "name": "Nova Beam",
+    "tier": 6,
+    "baseDPS": 5000,
+    "baseClickDamage": 2500,
+    "description": "Promień nowy niszczący wszystko w promieniu.",
+    "equipBonus": { "type": "aoe", "value": 0.3, "desc": "AoE damage 30% wokół trafionego celu" },
+    "craftCost": { "neutrino_quartz": 25, "fusionium": 12, "plasma": 6 },
+    "unlockGalaxy": 5
+  },
+  {
+    "id": "singularity_cannon",
+    "name": "Singularity Cannon",
+    "tier": 7,
+    "baseDPS": 25000,
+    "baseClickDamage": 12000,
+    "description": "Działo tworzące mikro-czarne dziury przy trafieniu.",
+    "equipBonus": { "type": "black_hole_chance", "value": 0.03, "desc": "3% szansa na black hole przy trafieniu" },
+    "craftCost": { "plasma": 15, "neutron_core": 8, "exotic_matter": 4, "quantum_string": 2 },
+    "unlockGalaxy": 6
+  }
+]

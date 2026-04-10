@@ -1,0 +1,25 @@
+{
+  "resources": {
+    "iron": { "name": "Żelazo", "color": "#a8a8a8", "value": 1 },
+    "nickel": { "name": "Nikiel", "color": "#c0c0c0", "value": 2 },
+    "helium3": { "name": "Hel-3", "color": "#87ceeb", "value": 8 },
+    "star_crystal": { "name": "Kryształ Gwiezdny", "color": "#e0e0ff", "value": 20 },
+    "antimatter": { "name": "Antymateria", "color": "#ff69b4", "value": 80 },
+    "degenerate": { "name": "Degenerat", "color": "#dda0dd", "value": 150 },
+    "dark_matter": { "name": "Ciemna Materia", "color": "#4b0082", "value": 500 },
+    "exotic_particle": { "name": "Cząstka Egzotyczna", "color": "#9400d3", "value": 1200 },
+    "neutrino_quartz": { "name": "Kwarc Neutrinowy", "color": "#00ff7f", "value": 4000 },
+    "fusionium": { "name": "Fuzjonium", "color": "#ff6347", "value": 10000 },
+    "plasma": { "name": "Plazma", "color": "#ff4500", "value": 40000 },
+    "neutron_core": { "name": "Rdzeń Neutronowy", "color": "#ffd700", "value": 150000 },
+    "exotic_matter": { "name": "Materia Egzotyczna", "color": "#ff00ff", "value": 600000 },
+    "quantum_string": { "name": "Struna Kwantowa", "color": "#ffffff", "value": 2500000 }
+  },
+  "rarities": {
+    "common": { "name": "Zwykły", "color": "#8a8a8a", "weight": 60 },
+    "uncommon": { "name": "Niepospolity", "color": "#50c878", "weight": 25 },
+    "rare": { "name": "Rzadki", "color": "#009dff", "weight": 10 },
+    "epic": { "name": "Epicki", "color": "#9b59b6", "weight": 4 },
+    "legendary": { "name": "Legendarny", "color": "#ff6b35", "weight": 1 }
+  }
+}

@@ -1,0 +1,172 @@
+export default {
+  nodes: [
+    {
+      id: 'iron_lattice',
+      name: 'Iron Lattice',
+      description: 'Grubsza wiązka zwiększa bazowe obrażenia kliknięcia.',
+      costResource: 'iron',
+      baseCost: 24,
+      costScale: 1.55,
+      maxLevel: 5,
+      effect: { type: 'click_damage_flat', value: 4 },
+      requires: [],
+      position: { x: 750, y: 350 }
+    },
+    {
+      id: 'nickel_focus',
+      name: 'Nickel Focus',
+      description: 'Stabilizacja rdzenia zwiększa mnoznik klikniecia.',
+      costResource: 'nickel',
+      baseCost: 20,
+      costScale: 1.6,
+      maxLevel: 4,
+      effect: { type: 'click_damage_mult', value: 0.12 },
+      requires: ['iron_lattice'],
+      position: { x: 750, y: 210 }
+    },
+    {
+      id: 'helium_scope',
+      name: 'Helium Scope',
+      description: 'Lepsza kalibracja daje wiecej critow.',
+      costResource: 'helium3',
+      baseCost: 34,
+      costScale: 1.65,
+      maxLevel: 4,
+      effect: { type: 'crit_chance', value: 0.03 },
+      requires: ['nickel_focus'],
+      position: { x: 750, y: 70 }
+    },
+    {
+      id: 'degenerate_radar',
+      name: 'Degenerate Radar',
+      description: 'Szybciej namierzasz cele bossowe w danej galaktyce.',
+      costResource: 'degenerate',
+      baseCost: 12,
+      costScale: 1.9,
+      maxLevel: 3,
+      effect: { type: 'boss_progress', value: 0.18 },
+      requires: ['helium_scope'],
+      position: { x: 750, y: -70 }
+    },
+    {
+      id: 'crystal_clock',
+      name: 'Crystal Clock',
+      description: 'Gwiezdne kryształy wydluzaja czas wyprawy.',
+      costResource: 'star_crystal',
+      baseCost: 28,
+      costScale: 1.7,
+      maxLevel: 3,
+      effect: { type: 'expedition_time', value: 4 },
+      requires: ['iron_lattice'],
+      position: { x: 890, y: 350 }
+    },
+    {
+      id: 'antimatter_yield',
+      name: 'Antimatter Yield',
+      description: 'Lepszy recykling daje wiecej surowcow z kazdego runu.',
+      costResource: 'antimatter',
+      baseCost: 16,
+      costScale: 1.85,
+      maxLevel: 4,
+      effect: { type: 'resource_mult', value: 0.15 },
+      requires: ['crystal_clock'],
+      position: { x: 1030, y: 350 }
+    },
+    {
+      id: 'darkmatter_armor',
+      name: 'Darkmatter Armor',
+      description: 'Pancerz z ciemnej materii daje wiecej zycia.',
+      costResource: 'dark_matter',
+      baseCost: 10,
+      costScale: 2,
+      maxLevel: 4,
+      effect: { type: 'max_hp', value: 0.15 },
+      requires: ['antimatter_yield'],
+      position: { x: 1170, y: 350 }
+    },
+    {
+      id: 'particle_barrier',
+      name: 'Particle Barrier',
+      description: 'Egzotyczne czastki zamieniaja czesc HP w tarcze.',
+      costResource: 'exotic_particle',
+      baseCost: 8,
+      costScale: 2,
+      maxLevel: 3,
+      effect: { type: 'shield', value: 0.08 },
+      requires: ['iron_lattice'],
+      position: { x: 750, y: 490 }
+    },
+    {
+      id: 'neutrino_repair',
+      name: 'Neutrino Repair',
+      description: 'Kwarc neutrinowy aktywuje pasywna regeneracje.',
+      costResource: 'neutrino_quartz',
+      baseCost: 6,
+      costScale: 2.1,
+      maxLevel: 3,
+      effect: { type: 'passive_regen', value: 0.015 },
+      requires: ['particle_barrier'],
+      position: { x: 750, y: 630 }
+    },
+    {
+      id: 'fusion_overload',
+      name: 'Fusion Overload',
+      description: 'Fuzjonium wzmacnia krytyczne trafienia.',
+      costResource: 'fusionium',
+      baseCost: 5,
+      costScale: 2.15,
+      maxLevel: 3,
+      effect: { type: 'crit_mult', value: 0.5 },
+      requires: ['neutrino_repair'],
+      position: { x: 750, y: 770 }
+    },
+    {
+      id: 'plasma_refinery',
+      name: 'Plasma Refinery',
+      description: 'Plazma podbija wydajnosc kazdego zniszczonego celu.',
+      costResource: 'plasma',
+      baseCost: 4,
+      costScale: 2.2,
+      maxLevel: 3,
+      effect: { type: 'resource_mult', value: 0.22 },
+      requires: ['iron_lattice'],
+      position: { x: 610, y: 350 }
+    },
+    {
+      id: 'neutron_driver',
+      name: 'Neutron Driver',
+      description: 'Rdzen neutronowy daje brutalny mnoznik klikniecia.',
+      costResource: 'neutron_core',
+      baseCost: 3,
+      costScale: 2.25,
+      maxLevel: 3,
+      effect: { type: 'click_damage_mult', value: 0.25 },
+      requires: ['plasma_refinery'],
+      position: { x: 470, y: 350 }
+    },
+    {
+      id: 'exotic_timefold',
+      name: 'Exotic Timefold',
+      description: 'Materia egzotyczna rozciaga limit czasu runu.',
+      costResource: 'exotic_matter',
+      baseCost: 2,
+      costScale: 2.3,
+      maxLevel: 2,
+      effect: { type: 'expedition_time', value: 8 },
+      requires: ['neutron_driver'],
+      position: { x: 330, y: 350 }
+    },
+    {
+      id: 'quantum_verdict',
+      name: 'Quantum Verdict',
+      description: 'Ostatni wezel: ogromny boost obrazen i critow.',
+      costResource: 'quantum_string',
+      baseCost: 1,
+      costScale: 2.5,
+      maxLevel: 2,
+      effect: { type: 'click_damage_mult', value: 0.4 },
+      requires: ['exotic_timefold'],
+      position: { x: 190, y: 350 }
+    }
+  ]
+};
