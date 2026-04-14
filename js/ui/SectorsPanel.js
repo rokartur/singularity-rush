@@ -20,6 +20,7 @@ export function renderSectorsPanel(metaState, gameState, sectorsData) {
           <span class="sector-cost">Boss: ${sector.bossName || sector.bossId}</span>
           <span class="sector-cost">Boss payout: ${sector.resourceReward ?? 0} resources</span>
         </div>
+        ${sector.firstClearReward ? `<div class="sector-desc">First clear bonus: +${sector.firstClearReward} resources</div>` : ''}
         ${sector.recommendedPower ? `<div class="sector-desc">Recommended: ${sector.recommendedPower}</div>` : ''}
         ${completed ? '<div class="sector-badge completed-badge">CLEARED</div>' : ''}
         ${!unlocked ? '<div class="sector-badge locked-badge">LOCKED</div>' : ''}

@@ -125,6 +125,28 @@ body {
   flex-shrink: 0;
 }
 
+.station-status {
+  padding: 10px 24px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.station-status.info {
+  background: rgba(52, 152, 219, 0.18);
+  color: #9fd5ff;
+}
+
+.station-status.success {
+  background: rgba(80, 200, 120, 0.16);
+  color: #a7f0bf;
+}
+
+.station-status.warning {
+  background: rgba(212, 168, 67, 0.16);
+  color: #f3d485;
+}
+
 .nav-btn {
   font-family: var(--font-header);
   font-size: 16px;
@@ -767,6 +789,10 @@ body {
 
 .skill-graph-node:active {
   transform: scale(0.97);
+}
+
+.skill-graph-node:disabled {
+  opacity: 1;
 }
 
 .skill-graph-node-wrap:hover .skill-graph-node,

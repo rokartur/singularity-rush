@@ -24,10 +24,40 @@ describe('SkillTree', () => {
     const tree = new SkillTree(meta);
     tree.loadData(skills);
 
-    meta.addResources(100);
+    meta.addResources(300);
     expect(tree.purchase('core_targeting')).toBe(true);
     expect(tree.getNodeCost('core_targeting')).toBe(6);
     expect(tree.purchase('core_targeting')).toBe(false);
     expect(tree.getTotalEffect('click_damage_flat')).toBe(8);
+  });
+
+  it('describes why a node is blocked before purchase', () => {
+    const meta = new MetaState();
+    const tree = new SkillTree(meta);
+    tree.loadData(skills);
+
+    expect(tree.getPurchaseBlocker('plasma_rifle_license')).toMatchObject({
+      code: 'missing_prerequisites',
+      missingPrerequisites: ['crit_matrix', 'pulse_cannon_license']
+    });
+
+    meta.addResources(10);
+    expect(tree.getPurchaseBlocker('combat_throttle')).toMatchObject({
+      code: 'missing_prerequisites',
+      missingPrerequisites: ['core_targeting']
+    });
+
+    meta.addResources(300);
+    tree.purchase('core_targeting');
+    tree.purchase('combat_throttle');
+    tree.purchase('vector_thrusters');
+    tree.purchase('time_dilation');
+    tree.purchase('boss_scanner');
+    tree.purchase('cooldown_mesh');
+
+    expect(tree.getPurchaseBlocker('void_beam_license')).toMatchObject({
+      code: 'missing_zones',
+      missingZones: [3]
+    });
   });
 });

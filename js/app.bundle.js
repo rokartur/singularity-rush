@@ -1044,6 +1044,289 @@
     };
   }
 
+  // js/game/MetaState.js
+  var META_CURRENCY_LABEL = "RESOURCES";
+  var DEFAULT_FAIL_RETENTION = 0.4;
+  var MAX_FAIL_RETENTION = 0.9;
+  var DEFAULT_WEAPON_SLOTS = 2;
+  var DEFAULT_UTILITY_SLOTS = 1;
+  function getFailRetentionRate(skillTree = null) {
+    const bonus = skillTree?.getTotalEffect?.("fail_retention") || 0;
+    return Math.min(MAX_FAIL_RETENTION, Math.max(0, DEFAULT_FAIL_RETENTION + bonus));
+  }
+  function withUniqueNumbers(values, fallback = [0]) {
+    const normalized = Array.isArray(values) ? [...new Set(values.filter((value) => Number.isInteger(value) && value >= 0))].sort((a, b) => a - b) : [];
+    return normalized.length > 0 ? normalized : [...fallback];
+  }
+  function withUniqueStrings(values, fallback = []) {
+    const normalized = Array.isArray(values) ? [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))] : [];
+    return normalized.length > 0 ? normalized : [...fallback];
+  }
+  var MetaState = class {
+    constructor() {
+      this.day = 1;
+      this.runCount = 0;
+      this.resources = 0;
+      this.selectedZone = 0;
+      this.unlockedZones = [0];
+      this.clearedZones = [];
+      this.purchasedSkillNodes = [];
+      this.unlockedWeapons = ["basic_laser"];
+      this.unlockedModules = [];
+      this.unlockedSystems = [];
+      this.equippedWeapons = ["basic_laser", null];
+      this.utilitySlots = [null];
+      this._listeners = /* @__PURE__ */ new Map();
+      this._pendingNotifications = [];
+    }
+    get selectedSectorIndex() {
+      return this.selectedZone;
+    }
+    set selectedSectorIndex(value) {
+      this.selectedZone = value;
+    }
+    get unlockedSectors() {
+      return this.unlockedZones;
+    }
+    set unlockedSectors(value) {
+      this.unlockedZones = value;
+    }
+    get completedSectors() {
+      return this.clearedZones;
+    }
+    set completedSectors(value) {
+      this.clearedZones = value;
+    }
+    get ownedWeapons() {
+      return this.unlockedWeapons;
+    }
+    set ownedWeapons(value) {
+      this.unlockedWeapons = value;
+    }
+    get metaCurrency() {
+      return this.resources;
+    }
+    set metaCurrency(value) {
+      this.resources = Math.max(0, Math.floor(value ?? 0));
+    }
+    on(event, cb) {
+      if (!this._listeners.has(event)) this._listeners.set(event, []);
+      this._listeners.get(event).push(cb);
+    }
+    off(event, cb) {
+      if (!this._listeners.has(event)) return;
+      const arr = this._listeners.get(event);
+      const idx = arr.indexOf(cb);
+      if (idx >= 0) arr.splice(idx, 1);
+    }
+    emit(event, data) {
+      this._pendingNotifications.push({ event, data });
+    }
+    flushNotifications() {
+      const pending = this._pendingNotifications;
+      this._pendingNotifications = [];
+      for (const { event, data } of pending) {
+        const listeners = this._listeners.get(event);
+        if (!listeners) continue;
+        for (const cb of listeners) cb(data);
+      }
+    }
+    isSectorUnlocked(index) {
+      return this.unlockedZones.includes(index);
+    }
+    isSectorCompleted(index) {
+      return this.clearedZones.includes(index);
+    }
+    isSkillNodePurchased(nodeId) {
+      return this.purchasedSkillNodes.includes(nodeId);
+    }
+    canAffordResources(amount) {
+      return this.resources >= amount;
+    }
+    canAffordMeta(amount) {
+      return this.canAffordResources(amount);
+    }
+    addResources(amount) {
+      if (!Number.isFinite(amount) || amount <= 0) return 0;
+      this.resources += Math.floor(amount);
+      this.emit("metaCurrencyChanged", { value: this.resources, delta: Math.floor(amount) });
+      return Math.floor(amount);
+    }
+    addMetaCurrency(amount) {
+      return this.addResources(amount);
+    }
+    spendResources(amount) {
+      const normalizedAmount = Math.floor(amount);
+      if (!this.canAffordResources(normalizedAmount)) return false;
+      this.resources -= normalizedAmount;
+      this.emit("metaCurrencyChanged", { value: this.resources, delta: -normalizedAmount });
+      return true;
+    }
+    spendMetaCurrency(amount) {
+      return this.spendResources(amount);
+    }
+    completeRun(summary = {}, zonesData = [], skillTree = null) {
+      this.runCount += 1;
+      this.day = 1 + this.runCount;
+      const zoneIndex = summary.zoneIndex ?? this.selectedZone;
+      const successful = Boolean(summary.success && summary.bossDefeated);
+      const wasAlreadyCleared = this.isSectorCompleted(zoneIndex);
+      const collected = Math.max(0, Math.floor(
+        summary.resourcesCollected ?? summary.resourcesFromAsteroids ?? 0
+      ));
+      const failRetentionRate = getFailRetentionRate(skillTree);
+      const firstClearBonusMultiplier = skillTree?.getTotalEffect?.("first_clear_bonus") || 0;
+      const zoneData = zonesData[zoneIndex] || null;
+      const baseFirstClearReward = Math.max(0, Math.floor(zoneData?.firstClearReward ?? 0));
+      const firstClearReward = successful && !wasAlreadyCleared ? Math.floor(baseFirstClearReward * (1 + firstClearBonusMultiplier)) : 0;
+      const retained = successful ? collected + firstClearReward : Math.floor(collected * failRetentionRate);
+      if (retained > 0) {
+        this.addResources(retained);
+      }
+      if (successful) {
+        this.markZoneCleared(zoneIndex);
+        this.unlockNextZone(zoneIndex, zonesData);
+      }
+      this.emit("runCompleted", {
+        day: this.day,
+        summary,
+        successful,
+        reward: retained,
+        retained,
+        collected,
+        firstClearReward,
+        failRetentionRate,
+        zoneIndex
+      });
+      summary.resourcesRetained = retained;
+      summary.firstClearBonus = firstClearReward;
+      summary.failRetentionRate = failRetentionRate;
+      return {
+        successful,
+        reward: retained,
+        retained,
+        collected,
+        firstClearReward,
+        failRetentionRate,
+        zoneIndex
+      };
+    }
+    unlockZone(index) {
+      if (!Number.isInteger(index) || index < 0 || this.unlockedZones.includes(index)) {
+        return false;
+      }
+      this.unlockedZones.push(index);
+      this.unlockedZones.sort((a, b) => a - b);
+      this.emit("zoneUnlocked", { index });
+      return true;
+    }
+    markZoneCleared(index) {
+      if (!Number.isInteger(index) || index < 0 || this.clearedZones.includes(index)) {
+        return false;
+      }
+      this.clearedZones.push(index);
+      this.clearedZones.sort((a, b) => a - b);
+      this.emit("zoneCleared", { index });
+      return true;
+    }
+    unlockNextZone(index, zonesData = []) {
+      const nextIndex = index + 1;
+      if (nextIndex >= zonesData.length) return false;
+      return this.unlockZone(nextIndex);
+    }
+    selectSector(index) {
+      if (!this.isSectorUnlocked(index)) return false;
+      this.selectedZone = index;
+      this.emit("sectorSelected", { index });
+      return true;
+    }
+    addPurchasedSkillNode(nodeId) {
+      if (this.purchasedSkillNodes.includes(nodeId)) return false;
+      this.purchasedSkillNodes.push(nodeId);
+      this.emit("skillNodePurchased", { nodeId });
+      return true;
+    }
+    unlockWeapon(weaponId) {
+      if (!weaponId || this.unlockedWeapons.includes(weaponId)) return false;
+      this.unlockedWeapons.push(weaponId);
+      this.emit("weaponUnlocked", { weaponId });
+      return true;
+    }
+    unlockModule(moduleId) {
+      if (!moduleId || this.unlockedModules.includes(moduleId)) return false;
+      this.unlockedModules.push(moduleId);
+      this.emit("moduleUnlocked", { moduleId });
+      return true;
+    }
+    unlockSystem(systemId) {
+      if (!systemId || this.unlockedSystems.includes(systemId)) return false;
+      this.unlockedSystems.push(systemId);
+      this.emit("systemUnlocked", { systemId });
+      return true;
+    }
+    equipWeapon(slotIndex, weaponId) {
+      if (slotIndex < 0 || slotIndex >= this.equippedWeapons.length) return false;
+      if (weaponId !== null && !this.unlockedWeapons.includes(weaponId)) return false;
+      this.equippedWeapons[slotIndex] = weaponId;
+      this.emit("loadoutChanged", { type: "weapon", slotIndex, weaponId });
+      return true;
+    }
+    equipUtility(slotIndex, moduleId) {
+      if (slotIndex < 0 || slotIndex >= this.utilitySlots.length) return false;
+      if (moduleId !== null && !this.unlockedModules.includes(moduleId)) return false;
+      this.utilitySlots[slotIndex] = moduleId;
+      this.emit("loadoutChanged", { type: "utility", slotIndex, moduleId });
+      return true;
+    }
+    serialize() {
+      return {
+        day: this.day,
+        runCount: this.runCount,
+        resources: this.resources,
+        selectedZone: this.selectedZone,
+        selectedSectorIndex: this.selectedZone,
+        unlockedZones: [...this.unlockedZones],
+        unlockedSectors: [...this.unlockedZones],
+        clearedZones: [...this.clearedZones],
+        completedSectors: [...this.clearedZones],
+        purchasedSkillNodes: [...this.purchasedSkillNodes],
+        unlockedWeapons: [...this.unlockedWeapons],
+        ownedWeapons: [...this.unlockedWeapons],
+        unlockedModules: [...this.unlockedModules],
+        unlockedSystems: [...this.unlockedSystems],
+        equippedWeapons: [...this.equippedWeapons],
+        utilitySlots: [...this.utilitySlots]
+      };
+    }
+    deserialize(data) {
+      if (!data) return;
+      this.day = data.day ?? 1;
+      this.runCount = data.runCount ?? 0;
+      this.resources = Math.max(0, Math.floor(data.resources ?? data.metaCurrency ?? 0));
+      this.selectedZone = data.selectedZone ?? data.selectedSectorIndex ?? 0;
+      this.unlockedZones = withUniqueNumbers(data.unlockedZones ?? data.unlockedSectors, [0]);
+      this.clearedZones = withUniqueNumbers(data.clearedZones ?? data.completedSectors, []);
+      this.purchasedSkillNodes = withUniqueStrings(data.purchasedSkillNodes, []);
+      this.unlockedWeapons = withUniqueStrings(data.unlockedWeapons ?? data.ownedWeapons, ["basic_laser"]);
+      this.unlockedModules = withUniqueStrings(data.unlockedModules, []);
+      this.unlockedSystems = withUniqueStrings(data.unlockedSystems, []);
+      this.equippedWeapons = Array.isArray(data.equippedWeapons) ? [...data.equippedWeapons] : ["basic_laser", null];
+      while (this.equippedWeapons.length < DEFAULT_WEAPON_SLOTS) {
+        this.equippedWeapons.push(null);
+      }
+      if (!this.equippedWeapons.some((weaponId) => weaponId === "basic_laser") && this.unlockedWeapons.includes("basic_laser")) {
+        this.equippedWeapons[0] = this.equippedWeapons[0] || "basic_laser";
+      }
+      this.utilitySlots = Array.isArray(data.utilitySlots) ? [...data.utilitySlots] : [null];
+      while (this.utilitySlots.length < DEFAULT_UTILITY_SLOTS) {
+        this.utilitySlots.push(null);
+      }
+      if (!this.isSectorUnlocked(this.selectedZone)) {
+        this.selectedZone = this.unlockedZones[0] ?? 0;
+      }
+    }
+  };
+
   // js/rendering/Particles.js
   var rng2 = new RNG();
   var Particle = class {
@@ -1751,17 +2034,38 @@
       if (!node) return [];
       return (node.prerequisites || []).filter((prerequisiteId) => !this.isPurchased(prerequisiteId));
     }
-    canPurchase(nodeId) {
+    getMissingZones(nodeId) {
       const node = this.getNode(nodeId);
-      if (!node || !this.meta) return false;
-      if (this.isPurchased(nodeId)) return false;
-      if (!this.meta.canAffordResources(node.cost)) return false;
-      if (this.getMissingPrerequisites(nodeId).length > 0) return false;
-      const requiredZones = node.requiredZonesCleared || [];
-      if (requiredZones.some((zoneIndex) => !this.meta.isSectorCompleted(zoneIndex))) {
-        return false;
+      if (!node) return [];
+      return (node.requiredZonesCleared || []).filter((zoneIndex) => !this.meta?.isSectorCompleted?.(zoneIndex));
+    }
+    getPurchaseBlocker(nodeId) {
+      const node = this.getNode(nodeId);
+      if (!node || !this.meta) {
+        return { code: "unavailable", node };
       }
-      return true;
+      if (this.isPurchased(nodeId)) {
+        return { code: "purchased", node };
+      }
+      const missingPrerequisites = this.getMissingPrerequisites(nodeId);
+      if (missingPrerequisites.length > 0) {
+        return { code: "missing_prerequisites", node, missingPrerequisites };
+      }
+      const missingZones = this.getMissingZones(nodeId);
+      if (missingZones.length > 0) {
+        return { code: "missing_zones", node, missingZones };
+      }
+      if (!this.meta.canAffordResources(node.cost)) {
+        return {
+          code: "missing_resources",
+          node,
+          missingAmount: Math.max(0, Math.ceil(node.cost - this.meta.resources))
+        };
+      }
+      return null;
+    }
+    canPurchase(nodeId) {
+      return this.getPurchaseBlocker(nodeId) === null;
     }
     purchase(nodeId) {
       if (!this.canPurchase(nodeId)) return false;
@@ -1793,12 +2097,15 @@
     }
     getNodeState(nodeId) {
       const node = this.getNode(nodeId);
+      const blocker = this.getPurchaseBlocker(nodeId);
       return {
         node,
         isPurchased: this.isPurchased(nodeId),
-        canPurchase: this.canPurchase(nodeId),
+        canPurchase: blocker === null,
         cost: node?.cost ?? Infinity,
-        missingPrerequisites: this.getMissingPrerequisites(nodeId)
+        missingPrerequisites: this.getMissingPrerequisites(nodeId),
+        missingZones: this.getMissingZones(nodeId),
+        blocker
       };
     }
   };
@@ -1912,7 +2219,8 @@
       asteroidColor: "#8a8a8a",
       starDensity: 60,
       resources: ["resources"],
-      resourceReward: 12,
+      resourceReward: 16,
+      firstClearReward: 10,
       bossId: "great_asteroid",
       unlockRule: "start",
       recommendedPower: "Starter loadout",
@@ -1940,7 +2248,8 @@
       asteroidColor: "#6a5acd",
       starDensity: 80,
       resources: ["resources"],
-      resourceReward: 18,
+      resourceReward: 26,
+      firstClearReward: 20,
       bossId: "star_leviathan",
       unlockRule: "defeat_previous_boss",
       recommendedPower: "Early offense branch + one utility unlock",
@@ -1969,7 +2278,8 @@
       asteroidColor: "#cd853f",
       starDensity: 100,
       resources: ["resources"],
-      resourceReward: 25,
+      resourceReward: 38,
+      firstClearReward: 32,
       bossId: "binary_star",
       unlockRule: "defeat_previous_boss",
       recommendedPower: "Two branch specialization and an unlocked weapon",
@@ -1997,7 +2307,8 @@
       asteroidColor: "#4b0082",
       starDensity: 40,
       resources: ["resources"],
-      resourceReward: 35,
+      resourceReward: 56,
+      firstClearReward: 48,
       bossId: "event_horizon",
       unlockRule: "defeat_previous_boss",
       recommendedPower: "Defensive branch online with boss tempo nodes",
@@ -2025,7 +2336,8 @@
       asteroidColor: "#00ff7f",
       starDensity: 120,
       resources: ["resources"],
-      resourceReward: 50,
+      resourceReward: 82,
+      firstClearReward: 70,
       bossId: "star_beetle",
       unlockRule: "defeat_previous_boss",
       recommendedPower: "Broad survival plus mining efficiency stack",
@@ -2053,7 +2365,8 @@
       asteroidColor: "#ff4500",
       starDensity: 90,
       resources: ["resources"],
-      resourceReward: 65,
+      resourceReward: 118,
+      firstClearReward: 96,
       bossId: "supernova_core",
       unlockRule: "defeat_previous_boss",
       recommendedPower: "Mid-late tree with stronger crit or shield build",
@@ -2082,7 +2395,8 @@
       asteroidColor: "#ff00ff",
       starDensity: 150,
       resources: ["resources"],
-      resourceReward: 80,
+      resourceReward: 168,
+      firstClearReward: 140,
       bossId: "singularity",
       unlockRule: "defeat_previous_boss",
       recommendedPower: "Late tree capstones and multiple content unlocks",
@@ -2168,6 +2482,18 @@
         tier: 1
       },
       {
+        id: "targeting_uplink",
+        branch: "offense",
+        title: "Targeting Uplink",
+        description: "Feeds fresh telemetry into the firing rig for chunkier hits.",
+        cost: 16,
+        prerequisites: ["crit_matrix"],
+        effectType: "stat",
+        effectKey: "click_damage_flat",
+        effectValue: 14,
+        tier: 2
+      },
+      {
         id: "pulse_cannon_license",
         branch: "offense",
         title: "Pulse Cannon License",
@@ -2202,6 +2528,18 @@
         tier: 3
       },
       {
+        id: "laser_overclock",
+        branch: "offense",
+        title: "Laser Overclock",
+        description: "Pushes the weapon core harder for a late-run rate spike.",
+        cost: 54,
+        prerequisites: ["overcharge_chamber"],
+        effectType: "stat",
+        effectKey: "fire_rate",
+        effectValue: 0.55,
+        tier: 4
+      },
+      {
         id: "quantum_driver_license",
         branch: "offense",
         title: "Quantum Driver License",
@@ -2212,6 +2550,18 @@
         effectType: "unlock_weapon",
         effectValue: "quantum_driver",
         tier: 4
+      },
+      {
+        id: "singularity_cannon_license",
+        branch: "offense",
+        title: "Singularity Cannon License",
+        description: "Unlocks the station's nastiest siege weapon for deep campaign pushes.",
+        cost: 88,
+        prerequisites: ["quantum_driver_license", "laser_overclock"],
+        requiredZonesCleared: [5],
+        effectType: "unlock_weapon",
+        effectValue: "singularity_cannon",
+        tier: 5
       },
       {
         id: "reinforced_bulkheads",
@@ -2249,6 +2599,18 @@
         tier: 2
       },
       {
+        id: "ablative_mesh",
+        branch: "defense",
+        title: "Ablative Mesh",
+        description: "Adds a forgiving hull buffer that smooths out bad runs.",
+        cost: 24,
+        prerequisites: ["reinforced_bulkheads"],
+        effectType: "stat",
+        effectKey: "max_hp",
+        effectValue: 0.16,
+        tier: 2
+      },
+      {
         id: "repair_drone_license",
         branch: "defense",
         title: "Repair Drone License",
@@ -2257,6 +2619,18 @@
         prerequisites: ["particle_screening"],
         effectType: "unlock_module",
         effectValue: "repair_drone",
+        tier: 3
+      },
+      {
+        id: "capacitor_lattice",
+        branch: "defense",
+        title: "Capacitor Lattice",
+        description: "Densifies the shield shell so mistakes are easier to recover from.",
+        cost: 36,
+        prerequisites: ["particle_screening"],
+        effectType: "stat",
+        effectKey: "shield",
+        effectValue: 0.12,
         tier: 3
       },
       {
@@ -2270,6 +2644,18 @@
         effectKey: "passive_regen",
         effectValue: 0.02,
         tier: 4
+      },
+      {
+        id: "triage_protocol",
+        branch: "defense",
+        title: "Triage Protocol",
+        description: "Lets recovery systems catch up faster between heavy hits.",
+        cost: 60,
+        prerequisites: ["emergency_regen"],
+        effectType: "stat",
+        effectKey: "passive_regen",
+        effectValue: 0.025,
+        tier: 5
       },
       {
         id: "ore_crushers",
@@ -2318,6 +2704,30 @@
         tier: 2
       },
       {
+        id: "survey_beacons",
+        branch: "mining",
+        title: "Survey Beacons",
+        description: "Pays out harder when you clear a zone for the first time.",
+        cost: 28,
+        prerequisites: ["precision_extractors"],
+        effectType: "stat",
+        effectKey: "first_clear_bonus",
+        effectValue: 0.2,
+        tier: 3
+      },
+      {
+        id: "scavenger_drones",
+        branch: "mining",
+        title: "Scavenger Drones",
+        description: "Keeps vacuuming up scraps so every asteroid feels juicier.",
+        cost: 34,
+        prerequisites: ["cargo_expander_license"],
+        effectType: "stat",
+        effectKey: "resource_mult",
+        effectValue: 0.2,
+        tier: 3
+      },
+      {
         id: "deep_core_reprocessing",
         branch: "mining",
         title: "Deep Core Reprocessing",
@@ -2329,6 +2739,19 @@
         effectKey: "resource_mult",
         effectValue: 0.3,
         tier: 4
+      },
+      {
+        id: "jackpot_relays",
+        branch: "mining",
+        title: "Jackpot Relays",
+        description: "Late-game salvage routers turn dense sectors into payout fountains.",
+        cost: 68,
+        prerequisites: ["deep_core_reprocessing"],
+        requiredZonesCleared: [3],
+        effectType: "stat",
+        effectKey: "resource_mult",
+        effectValue: 0.36,
+        tier: 5
       },
       {
         id: "vector_thrusters",
@@ -2355,6 +2778,30 @@
         tier: 1
       },
       {
+        id: "drift_stabilizers",
+        branch: "utility",
+        title: "Drift Stabilizers",
+        description: "Trims dead travel time so runs keep paying out faster.",
+        cost: 18,
+        prerequisites: ["vector_thrusters"],
+        effectType: "stat",
+        effectKey: "ship_speed",
+        effectValue: 34,
+        tier: 2
+      },
+      {
+        id: "fallback_cache",
+        branch: "utility",
+        title: "Fallback Cache",
+        description: "Stores extra salvage so failed pushes still feel worthwhile.",
+        cost: 22,
+        prerequisites: ["time_dilation"],
+        effectType: "stat",
+        effectKey: "fail_retention",
+        effectValue: 0.1,
+        tier: 2
+      },
+      {
         id: "boss_scanner",
         branch: "utility",
         title: "Boss Scanner",
@@ -2377,6 +2824,18 @@
         effectKey: "fire_rate",
         effectValue: 0.7,
         tier: 3
+      },
+      {
+        id: "hunter_killer_link",
+        branch: "utility",
+        title: "Hunter-Killer Link",
+        description: "Streams target locks straight into boss tracking subsystems.",
+        cost: 50,
+        prerequisites: ["cooldown_mesh"],
+        effectType: "stat",
+        effectKey: "boss_progress",
+        effectValue: 0.32,
+        tier: 4
       },
       {
         id: "void_beam_license",
@@ -2653,7 +3112,7 @@
         const timer = document.getElementById("expedition-timer");
         if (timer) timer.style.display = "none";
         if (this._metaState) {
-          this._metaState.completeRun(this.gs.expeditionState, sectors_default);
+          this._metaState.completeRun(this.gs.expeditionState, sectors_default, this.skillTree);
           this._syncMetaProgression();
         }
         this._showRunSummary();
@@ -3063,14 +3522,19 @@
       const enemyResources = Math.max(0, Math.floor(summary.resourcesFromEnemies || 0));
       const bossResources = Math.max(0, Math.floor(summary.resourcesFromBoss || 0));
       const totalResources = Math.max(0, Math.floor(summary.resourcesCollected || 0));
-      const retainedResources = successful ? totalResources : Math.floor(totalResources * 0.25);
+      const retainedResources = Math.max(0, Math.floor(
+        summary.resourcesRetained ?? (successful ? totalResources : totalResources * (summary.failRetentionRate ?? DEFAULT_FAIL_RETENTION))
+      ));
+      const firstClearBonus = Math.max(0, Math.floor(summary.firstClearBonus || 0));
+      const failRetentionPercent = Math.round((summary.failRetentionRate ?? DEFAULT_FAIL_RETENTION) * 100);
       content.innerHTML = `
       <div class="summary-row"><span>Zone</span><span class="summary-val">${summary.zoneName || `Zone ${summary.zoneIndex + 1}`}</span></div>
-      <div class="summary-row"><span>Status</span><span class="summary-val ${successful ? "green" : "red"}">${successful ? "Boss defeated" : "Retained 25% on fail"}</span></div>
+      <div class="summary-row"><span>Status</span><span class="summary-val ${successful ? "green" : "red"}">${successful ? "Boss defeated" : `Retained ${failRetentionPercent}% on fail`}</span></div>
       <div class="summary-row"><span>Asteroids</span><span class="summary-val">${formatNumber(asteroidResources)}</span></div>
       <div class="summary-row"><span>Enemies</span><span class="summary-val">${formatNumber(enemyResources)}</span></div>
       <div class="summary-row"><span>Boss</span><span class="summary-val gold">${formatNumber(bossResources)}</span></div>
       <div class="summary-row"><span>Total Resources</span><span class="summary-val">${formatNumber(totalResources)}</span></div>
+      ${firstClearBonus > 0 ? `<div class="summary-row"><span>First Clear Bonus</span><span class="summary-val gold">+${formatNumber(firstClearBonus)}</span></div>` : ""}
       <div class="summary-row"><span>Retained</span><span class="summary-val gold">+${formatNumber(retainedResources)} ${this.resourcesData?.resources.resources?.name || "resources"}</span></div>
       <div class="summary-row"><span>Destroyed</span><span class="summary-val">${summary.asteroidsDestroyed}</span></div>
       <div class="summary-row"><span>Max Combo</span><span class="summary-val gold">x${summary.maxCombo}</span></div>
@@ -3086,268 +3550,30 @@
     }
   };
 
-  // js/game/MetaState.js
-  var META_CURRENCY_LABEL = "RESOURCES";
-  var DEFAULT_WEAPON_SLOTS = 2;
-  var DEFAULT_UTILITY_SLOTS = 1;
-  function withUniqueNumbers(values, fallback = [0]) {
-    const normalized = Array.isArray(values) ? [...new Set(values.filter((value) => Number.isInteger(value) && value >= 0))].sort((a, b) => a - b) : [];
-    return normalized.length > 0 ? normalized : [...fallback];
-  }
-  function withUniqueStrings(values, fallback = []) {
-    const normalized = Array.isArray(values) ? [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))] : [];
-    return normalized.length > 0 ? normalized : [...fallback];
-  }
-  var MetaState = class {
-    constructor() {
-      this.day = 1;
-      this.runCount = 0;
-      this.resources = 0;
-      this.selectedZone = 0;
-      this.unlockedZones = [0];
-      this.clearedZones = [];
-      this.purchasedSkillNodes = [];
-      this.unlockedWeapons = ["basic_laser"];
-      this.unlockedModules = [];
-      this.unlockedSystems = [];
-      this.equippedWeapons = ["basic_laser", null];
-      this.utilitySlots = [null];
-      this._listeners = /* @__PURE__ */ new Map();
-      this._pendingNotifications = [];
-    }
-    get selectedSectorIndex() {
-      return this.selectedZone;
-    }
-    set selectedSectorIndex(value) {
-      this.selectedZone = value;
-    }
-    get unlockedSectors() {
-      return this.unlockedZones;
-    }
-    set unlockedSectors(value) {
-      this.unlockedZones = value;
-    }
-    get completedSectors() {
-      return this.clearedZones;
-    }
-    set completedSectors(value) {
-      this.clearedZones = value;
-    }
-    get ownedWeapons() {
-      return this.unlockedWeapons;
-    }
-    set ownedWeapons(value) {
-      this.unlockedWeapons = value;
-    }
-    get metaCurrency() {
-      return this.resources;
-    }
-    set metaCurrency(value) {
-      this.resources = Math.max(0, Math.floor(value ?? 0));
-    }
-    on(event, cb) {
-      if (!this._listeners.has(event)) this._listeners.set(event, []);
-      this._listeners.get(event).push(cb);
-    }
-    off(event, cb) {
-      if (!this._listeners.has(event)) return;
-      const arr = this._listeners.get(event);
-      const idx = arr.indexOf(cb);
-      if (idx >= 0) arr.splice(idx, 1);
-    }
-    emit(event, data) {
-      this._pendingNotifications.push({ event, data });
-    }
-    flushNotifications() {
-      const pending = this._pendingNotifications;
-      this._pendingNotifications = [];
-      for (const { event, data } of pending) {
-        const listeners = this._listeners.get(event);
-        if (!listeners) continue;
-        for (const cb of listeners) cb(data);
-      }
-    }
-    isSectorUnlocked(index) {
-      return this.unlockedZones.includes(index);
-    }
-    isSectorCompleted(index) {
-      return this.clearedZones.includes(index);
-    }
-    isSkillNodePurchased(nodeId) {
-      return this.purchasedSkillNodes.includes(nodeId);
-    }
-    canAffordResources(amount) {
-      return this.resources >= amount;
-    }
-    canAffordMeta(amount) {
-      return this.canAffordResources(amount);
-    }
-    addResources(amount) {
-      if (!Number.isFinite(amount) || amount <= 0) return 0;
-      this.resources += Math.floor(amount);
-      this.emit("metaCurrencyChanged", { value: this.resources, delta: Math.floor(amount) });
-      return Math.floor(amount);
-    }
-    addMetaCurrency(amount) {
-      return this.addResources(amount);
-    }
-    spendResources(amount) {
-      const normalizedAmount = Math.floor(amount);
-      if (!this.canAffordResources(normalizedAmount)) return false;
-      this.resources -= normalizedAmount;
-      this.emit("metaCurrencyChanged", { value: this.resources, delta: -normalizedAmount });
-      return true;
-    }
-    spendMetaCurrency(amount) {
-      return this.spendResources(amount);
-    }
-    completeRun(summary = {}, zonesData = []) {
-      this.runCount += 1;
-      this.day = 1 + this.runCount;
-      const zoneIndex = summary.zoneIndex ?? this.selectedZone;
-      const successful = Boolean(summary.success && summary.bossDefeated);
-      const collected = Math.max(0, Math.floor(
-        summary.resourcesCollected ?? summary.resourcesFromAsteroids ?? 0
-      ));
-      const retained = successful ? collected : Math.floor(collected * 0.25);
-      if (retained > 0) {
-        this.addResources(retained);
-      }
-      if (successful) {
-        this.markZoneCleared(zoneIndex);
-        this.unlockNextZone(zoneIndex, zonesData);
-      }
-      this.emit("runCompleted", {
-        day: this.day,
-        summary,
-        successful,
-        reward: retained,
-        retained,
-        collected,
-        zoneIndex
-      });
-      return { successful, reward: retained, retained, collected, zoneIndex };
-    }
-    unlockZone(index) {
-      if (!Number.isInteger(index) || index < 0 || this.unlockedZones.includes(index)) {
-        return false;
-      }
-      this.unlockedZones.push(index);
-      this.unlockedZones.sort((a, b) => a - b);
-      this.emit("zoneUnlocked", { index });
-      return true;
-    }
-    markZoneCleared(index) {
-      if (!Number.isInteger(index) || index < 0 || this.clearedZones.includes(index)) {
-        return false;
-      }
-      this.clearedZones.push(index);
-      this.clearedZones.sort((a, b) => a - b);
-      this.emit("zoneCleared", { index });
-      return true;
-    }
-    unlockNextZone(index, zonesData = []) {
-      const nextIndex = index + 1;
-      if (nextIndex >= zonesData.length) return false;
-      return this.unlockZone(nextIndex);
-    }
-    selectSector(index) {
-      if (!this.isSectorUnlocked(index)) return false;
-      this.selectedZone = index;
-      this.emit("sectorSelected", { index });
-      return true;
-    }
-    addPurchasedSkillNode(nodeId) {
-      if (this.purchasedSkillNodes.includes(nodeId)) return false;
-      this.purchasedSkillNodes.push(nodeId);
-      this.emit("skillNodePurchased", { nodeId });
-      return true;
-    }
-    unlockWeapon(weaponId) {
-      if (!weaponId || this.unlockedWeapons.includes(weaponId)) return false;
-      this.unlockedWeapons.push(weaponId);
-      this.emit("weaponUnlocked", { weaponId });
-      return true;
-    }
-    unlockModule(moduleId) {
-      if (!moduleId || this.unlockedModules.includes(moduleId)) return false;
-      this.unlockedModules.push(moduleId);
-      this.emit("moduleUnlocked", { moduleId });
-      return true;
-    }
-    unlockSystem(systemId) {
-      if (!systemId || this.unlockedSystems.includes(systemId)) return false;
-      this.unlockedSystems.push(systemId);
-      this.emit("systemUnlocked", { systemId });
-      return true;
-    }
-    equipWeapon(slotIndex, weaponId) {
-      if (slotIndex < 0 || slotIndex >= this.equippedWeapons.length) return false;
-      if (weaponId !== null && !this.unlockedWeapons.includes(weaponId)) return false;
-      this.equippedWeapons[slotIndex] = weaponId;
-      this.emit("loadoutChanged", { type: "weapon", slotIndex, weaponId });
-      return true;
-    }
-    equipUtility(slotIndex, moduleId) {
-      if (slotIndex < 0 || slotIndex >= this.utilitySlots.length) return false;
-      if (moduleId !== null && !this.unlockedModules.includes(moduleId)) return false;
-      this.utilitySlots[slotIndex] = moduleId;
-      this.emit("loadoutChanged", { type: "utility", slotIndex, moduleId });
-      return true;
-    }
-    serialize() {
-      return {
-        day: this.day,
-        runCount: this.runCount,
-        resources: this.resources,
-        selectedZone: this.selectedZone,
-        selectedSectorIndex: this.selectedZone,
-        unlockedZones: [...this.unlockedZones],
-        unlockedSectors: [...this.unlockedZones],
-        clearedZones: [...this.clearedZones],
-        completedSectors: [...this.clearedZones],
-        purchasedSkillNodes: [...this.purchasedSkillNodes],
-        unlockedWeapons: [...this.unlockedWeapons],
-        ownedWeapons: [...this.unlockedWeapons],
-        unlockedModules: [...this.unlockedModules],
-        unlockedSystems: [...this.unlockedSystems],
-        equippedWeapons: [...this.equippedWeapons],
-        utilitySlots: [...this.utilitySlots]
-      };
-    }
-    deserialize(data) {
-      if (!data) return;
-      this.day = data.day ?? 1;
-      this.runCount = data.runCount ?? 0;
-      this.resources = Math.max(0, Math.floor(data.resources ?? data.metaCurrency ?? 0));
-      this.selectedZone = data.selectedZone ?? data.selectedSectorIndex ?? 0;
-      this.unlockedZones = withUniqueNumbers(data.unlockedZones ?? data.unlockedSectors, [0]);
-      this.clearedZones = withUniqueNumbers(data.clearedZones ?? data.completedSectors, []);
-      this.purchasedSkillNodes = withUniqueStrings(data.purchasedSkillNodes, []);
-      this.unlockedWeapons = withUniqueStrings(data.unlockedWeapons ?? data.ownedWeapons, ["basic_laser"]);
-      this.unlockedModules = withUniqueStrings(data.unlockedModules, []);
-      this.unlockedSystems = withUniqueStrings(data.unlockedSystems, []);
-      this.equippedWeapons = Array.isArray(data.equippedWeapons) ? [...data.equippedWeapons] : ["basic_laser", null];
-      while (this.equippedWeapons.length < DEFAULT_WEAPON_SLOTS) {
-        this.equippedWeapons.push(null);
-      }
-      if (!this.equippedWeapons.some((weaponId) => weaponId === "basic_laser") && this.unlockedWeapons.includes("basic_laser")) {
-        this.equippedWeapons[0] = this.equippedWeapons[0] || "basic_laser";
-      }
-      this.utilitySlots = Array.isArray(data.utilitySlots) ? [...data.utilitySlots] : [null];
-      while (this.utilitySlots.length < DEFAULT_UTILITY_SLOTS) {
-        this.utilitySlots.push(null);
-      }
-      if (!this.isSectorUnlocked(this.selectedZone)) {
-        this.selectedZone = this.unlockedZones[0] ?? 0;
-      }
-    }
-  };
-
   // js/ui/StatsPanel.js
+  function getNextSkillGoal(game2, metaState2) {
+    const skillTree = game2.skillTree;
+    if (!skillTree?.getNodes) return null;
+    const candidates = skillTree.getNodes().filter((node) => {
+      if (skillTree.isPurchased(node.id)) return false;
+      if (skillTree.getMissingPrerequisites(node.id).length > 0) return false;
+      if (skillTree.getMissingZones(node.id).length > 0) return false;
+      return true;
+    });
+    if (candidates.length === 0) return null;
+    const nextNode = candidates.sort((left, right) => left.cost - right.cost)[0];
+    const shortfall = Math.max(0, nextNode.cost - metaState2.resources);
+    return {
+      title: nextNode.title,
+      cost: nextNode.cost,
+      shortfall
+    };
+  }
   function renderStatsPanel(game2, metaState2) {
     const gs = game2.gs;
     const selectedZone = game2.galaxy.getAllGalaxies?.()[metaState2.selectedSectorIndex];
+    const nextSkillGoal = getNextSkillGoal(game2, metaState2);
+    const failRetentionPercent = Math.round(getFailRetentionRate(game2.skillTree) * 100);
     const stats = {
       "Day": metaState2.day,
       [META_CURRENCY_LABEL]: metaState2.resources,
@@ -3362,8 +3588,9 @@
       "Resource Mult": `${Math.round(game2.resourceMult * 100)}%`,
       "Run Time": `${gs.baseExpeditionTime + game2.expeditionTimeBonus}s`,
       "Boss Progress": `${Math.round(game2.bossProgressMult * 100)}%`,
+      "Next Skill": nextSkillGoal ? nextSkillGoal.shortfall > 0 ? `${nextSkillGoal.title} (${nextSkillGoal.shortfall} short)` : `${nextSkillGoal.title} READY` : "Clear more zones",
       "Runs": metaState2.runCount,
-      "Fail Retention": "25%"
+      "Fail Retention": `${failRetentionPercent}%`
     };
     const currentResources = Object.entries(gs.resources).filter(([, v]) => v > 0).map(([key, val]) => {
       const info = resources_default.resources[key];
@@ -3403,6 +3630,7 @@
           <span class="sector-cost">Boss: ${sector.bossName || sector.bossId}</span>
           <span class="sector-cost">Boss payout: ${sector.resourceReward ?? 0} resources</span>
         </div>
+        ${sector.firstClearReward ? `<div class="sector-desc">First clear bonus: +${sector.firstClearReward} resources</div>` : ""}
         ${sector.recommendedPower ? `<div class="sector-desc">Recommended: ${sector.recommendedPower}</div>` : ""}
         ${completed ? '<div class="sector-badge completed-badge">CLEARED</div>' : ""}
         ${!unlocked ? '<div class="sector-badge locked-badge">LOCKED</div>' : ""}
@@ -3481,58 +3709,82 @@
   }
 
   // js/ui/SkillTreePanel.js
-  var GRAPH_WIDTH = 960;
-  var GRAPH_HEIGHT = 760;
+  var GRAPH_WIDTH = 1160;
+  var GRAPH_HEIGHT = 920;
   var NODE_LAYOUT = {
     core_targeting: { x: 438, y: 338, size: 84 },
     combat_throttle: { x: 448, y: 246, size: 64 },
     crit_matrix: { x: 448, y: 164, size: 60 },
+    targeting_uplink: { x: 522, y: 164, size: 60 },
     pulse_cannon_license: { x: 374, y: 164, size: 60 },
     plasma_rifle_license: { x: 374, y: 86, size: 60 },
     overcharge_chamber: { x: 448, y: 86, size: 60 },
     quantum_driver_license: { x: 522, y: 86, size: 60 },
+    laser_overclock: { x: 596, y: 86, size: 60 },
+    singularity_cannon_license: { x: 670, y: 86, size: 60 },
     hull_rivets: { x: 346, y: 348, size: 64 },
     reinforced_bulkheads: { x: 258, y: 348, size: 60 },
     shield_booster_license: { x: 258, y: 274, size: 60 },
     particle_screening: { x: 170, y: 311, size: 60 },
+    ablative_mesh: { x: 170, y: 385, size: 60 },
     repair_drone_license: { x: 96, y: 311, size: 60 },
+    capacitor_lattice: { x: 96, y: 385, size: 60 },
     emergency_regen: { x: 96, y: 237, size: 60 },
+    triage_protocol: { x: 96, y: 163, size: 60 },
     salvage_routines: { x: 448, y: 430, size: 64 },
     ore_crushers: { x: 448, y: 514, size: 60 },
     spread_shot_license: { x: 374, y: 514, size: 60 },
     precision_extractors: { x: 448, y: 598, size: 60 },
     cargo_expander_license: { x: 374, y: 598, size: 60 },
+    survey_beacons: { x: 522, y: 598, size: 60 },
+    scavenger_drones: { x: 300, y: 598, size: 60 },
     deep_core_reprocessing: { x: 448, y: 682, size: 60 },
+    jackpot_relays: { x: 448, y: 766, size: 60 },
     vector_thrusters: { x: 550, y: 348, size: 64 },
     time_dilation: { x: 640, y: 348, size: 60 },
     boss_scanner: { x: 728, y: 348, size: 60 },
+    drift_stabilizers: { x: 550, y: 422, size: 60 },
+    fallback_cache: { x: 640, y: 422, size: 60 },
     cooldown_mesh: { x: 728, y: 422, size: 60 },
+    hunter_killer_link: { x: 816, y: 348, size: 60 },
     void_beam_license: { x: 816, y: 422, size: 60 }
   };
   var GLYPHS = {
     core_targeting: "\u2699",
     combat_throttle: "ROF",
     crit_matrix: "CRT",
+    targeting_uplink: "DMG",
     pulse_cannon_license: "WPN",
     plasma_rifle_license: "PLS",
     overcharge_chamber: "AMP",
     quantum_driver_license: "QNT",
+    laser_overclock: "OVR",
+    singularity_cannon_license: "SGC",
     hull_rivets: "HP",
     reinforced_bulkheads: "HUL",
     shield_booster_license: "SHD",
     particle_screening: "SCR",
+    ablative_mesh: "ABL",
     repair_drone_license: "DRN",
+    capacitor_lattice: "CAP",
     emergency_regen: "REG",
+    triage_protocol: "MED",
     salvage_routines: "ORE",
     ore_crushers: "MIN",
     spread_shot_license: "SPR",
     precision_extractors: "PRC",
     cargo_expander_license: "CRG",
+    survey_beacons: "CLR",
+    scavenger_drones: "BOT",
     deep_core_reprocessing: "DCR",
+    jackpot_relays: "JPT",
     vector_thrusters: "SPD",
     time_dilation: "TIME",
     boss_scanner: "BOSS",
+    drift_stabilizers: "DRF",
+    fallback_cache: "SAFE",
     cooldown_mesh: "CDR",
+    hunter_killer_link: "HK",
     void_beam_license: "VOID"
   };
   var BRANCH_LABELS = {
@@ -3554,7 +3806,9 @@
     boss_progress: "boss progress",
     expedition_time: "run time",
     fire_rate: "fire rate",
-    ship_speed: "ship speed"
+    ship_speed: "ship speed",
+    fail_retention: "fail retention",
+    first_clear_bonus: "first clear bonus"
   };
   function centerOf(layout) {
     return {
@@ -3568,7 +3822,7 @@
     if (node.effectType === "unlock_system") return `Unlock system: ${node.effectValue}`;
     const label = EFFECT_LABELS[node.effectKey] || node.effectKey;
     const numericValue = Number(node.effectValue);
-    const isPercent = ["crit_chance", "click_damage_mult", "max_hp", "shield", "passive_regen", "resource_mult", "boss_progress"].includes(node.effectKey);
+    const isPercent = ["crit_chance", "click_damage_mult", "max_hp", "shield", "passive_regen", "resource_mult", "boss_progress", "fail_retention", "first_clear_bonus"].includes(node.effectKey);
     if (isPercent) {
       return `+${Math.round(numericValue * 100)}% ${label}`;
     }
@@ -3590,7 +3844,9 @@
       });
       notes.push(`Requires: ${missingTitles.join(", ")}`);
     }
-    if ((node.requiredZonesCleared || []).length > 0) {
+    if (state.missingZones.length > 0) {
+      notes.push(`Clear zones: ${state.missingZones.map((zone) => zone + 1).join(", ")}`);
+    } else if ((node.requiredZonesCleared || []).length > 0) {
       notes.push(`Zone clears: ${(node.requiredZonesCleared || []).map((zone) => zone + 1).join(", ")}`);
     }
     return notes;
@@ -3677,6 +3933,7 @@
         onclick="window.station.purchaseSkillNode('${node.id}')"
         aria-label="${node.title}"
         aria-disabled="${state.canPurchase ? "false" : "true"}"
+        ${state.canPurchase ? "" : "disabled"}
       >
         <span class="skill-graph-glyph">${getNodeGlyph(node, state)}</span>
       </button>
@@ -3732,6 +3989,8 @@
       this.skillTreePan = { x: null, y: null, zoom: null, dragging: false };
       this._skillTreeDrag = null;
       this._suppressSkillTreeClickUntil = 0;
+      this.stationStatus = null;
+      this._stationStatusTimer = null;
     }
     init() {
       this.render();
@@ -3744,6 +4003,8 @@
       this._bindEvents();
     }
     _buildShell() {
+      const selectedSector = this.sectorsData[this.meta.selectedSectorIndex];
+      const failRetentionPercent = Math.round(getFailRetentionRate(this.game.skillTree) * 100);
       return `
       <div class="station-layout">
         <div class="station-nav">
@@ -3756,6 +4017,7 @@
           <div class="nav-day">RUN ${this.meta.runCount}</div>
           <button class="nav-btn settings-btn" onclick="window.station.showSettings()">SETTINGS</button>
         </div>
+        ${this.stationStatus ? `<div class="station-status ${this.stationStatus.tone}" role="status">${this.stationStatus.message}</div>` : ""}
         <div class="station-body">
           <div class="station-center ${this.currentView === "skills" ? "skills-view" : ""}">
             ${this.currentView === "campaign" ? this._renderCampaignView() : ""}
@@ -3766,7 +4028,8 @@
             <div class="launch-section">
               <div class="launch-sector">${this._getSelectedSectorName()}</div>
               <div class="launch-meta">Boss payout: ${this._getSelectedSectorReward()} ${META_CURRENCY_LABEL}</div>
-              <div class="launch-meta">Failure keeps 25% of gathered ${META_CURRENCY_LABEL.toLowerCase()}</div>
+              <div class="launch-meta">Failure keeps ${failRetentionPercent}% of gathered ${META_CURRENCY_LABEL.toLowerCase()}</div>
+              ${selectedSector?.firstClearReward && !this.meta.isSectorCompleted(this.meta.selectedSectorIndex) ? `<div class="launch-meta">First clear bonus: +${selectedSector.firstClearReward} ${META_CURRENCY_LABEL}</div>` : ""}
               <button class="launch-btn" onclick="window.station.launch()">
                 \u25B6 LAUNCH
               </button>
@@ -3828,6 +4091,7 @@
       }, true);
       viewport.addEventListener("pointerdown", (event) => {
         if (event.button !== 0) return;
+        if (event.target.closest(".skill-graph-node-wrap, .skill-tree-toolbar")) return;
         this._skillTreeDrag = {
           pointerId: event.pointerId,
           startX: event.clientX,
@@ -3990,9 +4254,23 @@
       this.render();
     }
     purchaseSkillNode(nodeId) {
-      if (!this.game.skillTree.purchase(nodeId)) return;
+      const blocker = this.game.skillTree.getPurchaseBlocker(nodeId);
+      if (blocker) {
+        this._showStationStatus(this._formatPurchaseBlocker(blocker), "warning");
+        return;
+      }
+      const node = this.game.skillTree.getNode(nodeId);
+      const unlockedWeaponsBefore = new Set(this.meta.unlockedWeapons);
+      const unlockedModulesBefore = new Set(this.meta.unlockedModules);
+      if (!this.game.skillTree.purchase(nodeId)) {
+        this._showStationStatus("Purchase failed. Try again.", "warning");
+        return;
+      }
+      const autoEquipMessage = this._autoEquipRecentUnlock(unlockedWeaponsBefore, unlockedModulesBefore);
       this.game._recalcStats();
-      this.render();
+      this.game.save?.autoSave?.();
+      const successMessage = autoEquipMessage || this._formatPurchaseSuccess(node);
+      this._showStationStatus(successMessage, "success");
     }
     equipWeaponFromArmory(weaponId) {
       const equipped = this.meta.equippedWeapons;
@@ -4071,6 +4349,67 @@
       if (panel) panel.classList.remove("active");
       this.render();
       this.game._showStation();
+    }
+    _showStationStatus(message, tone = "info", duration = 2600) {
+      this.stationStatus = { message, tone };
+      this.render();
+      if (this._stationStatusTimer) {
+        clearTimeout(this._stationStatusTimer);
+        this._stationStatusTimer = null;
+      }
+      if (!duration) return;
+      this._stationStatusTimer = setTimeout(() => {
+        if (this.stationStatus?.message !== message) return;
+        this.stationStatus = null;
+        this._stationStatusTimer = null;
+        this.render();
+      }, duration);
+    }
+    _formatPurchaseBlocker(blocker) {
+      if (!blocker?.node) return "That upgrade is unavailable right now.";
+      if (blocker.code === "missing_resources") {
+        return `Need ${blocker.missingAmount} more ${META_CURRENCY_LABEL} for ${blocker.node.title}.`;
+      }
+      if (blocker.code === "missing_prerequisites") {
+        const titles = blocker.missingPrerequisites.map((nodeId) => this.game.skillTree.getNode(nodeId)?.title || nodeId);
+        return `Requires ${titles.join(", ")}.`;
+      }
+      if (blocker.code === "missing_zones") {
+        return `Clear zone ${blocker.missingZones.map((zoneIndex) => zoneIndex + 1).join(", ")} first.`;
+      }
+      if (blocker.code === "purchased") {
+        return `${blocker.node.title} is already online.`;
+      }
+      return `${blocker.node.title} is locked right now.`;
+    }
+    _formatPurchaseSuccess(node) {
+      if (!node) return "Upgrade installed.";
+      if (node.effectType === "unlock_weapon" || node.effectType === "unlock_module") {
+        return `${this._getLoadoutItemName(node.effectValue)} unlocked.`;
+      }
+      return `${node.title} installed.`;
+    }
+    _autoEquipRecentUnlock(unlockedWeaponsBefore, unlockedModulesBefore) {
+      const newWeapon = this.meta.unlockedWeapons.find((weaponId) => !unlockedWeaponsBefore.has(weaponId));
+      if (newWeapon) {
+        const emptyWeaponSlot = this.meta.equippedWeapons.indexOf(null);
+        if (emptyWeaponSlot >= 0 && this.meta.equipWeapon(emptyWeaponSlot, newWeapon)) {
+          return `${this._getLoadoutItemName(newWeapon)} unlocked and auto-equipped.`;
+        }
+        return `${this._getLoadoutItemName(newWeapon)} unlocked.`;
+      }
+      const newModule = this.meta.unlockedModules.find((moduleId) => !unlockedModulesBefore.has(moduleId));
+      if (newModule) {
+        const emptyUtilitySlot = this.meta.utilitySlots.indexOf(null);
+        if (emptyUtilitySlot >= 0 && this.meta.equipUtility(emptyUtilitySlot, newModule)) {
+          return `${this._getLoadoutItemName(newModule)} unlocked and auto-equipped.`;
+        }
+        return `${this._getLoadoutItemName(newModule)} unlocked.`;
+      }
+      return null;
+    }
+    _getLoadoutItemName(itemId) {
+      return weapons_default.find((item) => item.id === itemId)?.name || itemId;
     }
   };
 

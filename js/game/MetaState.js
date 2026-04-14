@@ -1,7 +1,14 @@
 export const META_CURRENCY_LABEL = 'RESOURCES';
+export const DEFAULT_FAIL_RETENTION = 0.4;
+export const MAX_FAIL_RETENTION = 0.9;
 
 const DEFAULT_WEAPON_SLOTS = 2;
 const DEFAULT_UTILITY_SLOTS = 1;
+
+export function getFailRetentionRate(skillTree = null) {
+  const bonus = skillTree?.getTotalEffect?.('fail_retention') || 0;
+  return Math.min(MAX_FAIL_RETENTION, Math.max(0, DEFAULT_FAIL_RETENTION + bonus));
+}
 
 function withUniqueNumbers(values, fallback = [0]) {
   const normalized = Array.isArray(values)
@@ -150,20 +157,28 @@ export class MetaState {
     return this.spendResources(amount);
   }
 
-  completeRun(summary = {}, zonesData = []) {
+  completeRun(summary = {}, zonesData = [], skillTree = null) {
     this.runCount += 1;
     this.day = 1 + this.runCount;
 
     const zoneIndex = summary.zoneIndex ?? this.selectedZone;
     const successful = Boolean(summary.success && summary.bossDefeated);
+    const wasAlreadyCleared = this.isSectorCompleted(zoneIndex);
     const collected = Math.max(0, Math.floor(
       summary.resourcesCollected
       ?? summary.resourcesFromAsteroids
       ?? 0
     ));
+    const failRetentionRate = getFailRetentionRate(skillTree);
+    const firstClearBonusMultiplier = skillTree?.getTotalEffect?.('first_clear_bonus') || 0;
+    const zoneData = zonesData[zoneIndex] || null;
+    const baseFirstClearReward = Math.max(0, Math.floor(zoneData?.firstClearReward ?? 0));
+    const firstClearReward = successful && !wasAlreadyCleared
+      ? Math.floor(baseFirstClearReward * (1 + firstClearBonusMultiplier))
+      : 0;
     const retained = successful
-      ? collected
-      : Math.floor(collected * 0.25);
+      ? collected + firstClearReward
+      : Math.floor(collected * failRetentionRate);
 
     if (retained > 0) {
       this.addResources(retained);
@@ -181,10 +196,24 @@ export class MetaState {
       reward: retained,
       retained,
       collected,
+      firstClearReward,
+      failRetentionRate,
       zoneIndex
     });
 
-    return { successful, reward: retained, retained, collected, zoneIndex };
+    summary.resourcesRetained = retained;
+    summary.firstClearBonus = firstClearReward;
+    summary.failRetentionRate = failRetentionRate;
+
+    return {
+      successful,
+      reward: retained,
+      retained,
+      collected,
+      firstClearReward,
+      failRetentionRate,
+      zoneIndex
+    };
   }
 
   unlockZone(index) {

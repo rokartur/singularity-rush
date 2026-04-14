@@ -1,10 +1,35 @@
-import { META_CURRENCY_LABEL } from '../game/MetaState.js';
+import { META_CURRENCY_LABEL, getFailRetentionRate } from '../game/MetaState.js';
 import { formatNumber } from '../utils/Math.js';
 import resourcesData from '../data/resources.js';
+
+function getNextSkillGoal(game, metaState) {
+  const skillTree = game.skillTree;
+  if (!skillTree?.getNodes) return null;
+
+  const candidates = skillTree.getNodes().filter((node) => {
+    if (skillTree.isPurchased(node.id)) return false;
+    if (skillTree.getMissingPrerequisites(node.id).length > 0) return false;
+    if (skillTree.getMissingZones(node.id).length > 0) return false;
+    return true;
+  });
+
+  if (candidates.length === 0) return null;
+
+  const nextNode = candidates.sort((left, right) => left.cost - right.cost)[0];
+  const shortfall = Math.max(0, nextNode.cost - metaState.resources);
+
+  return {
+    title: nextNode.title,
+    cost: nextNode.cost,
+    shortfall
+  };
+}
 
 export function renderStatsPanel(game, metaState) {
   const gs = game.gs;
   const selectedZone = game.galaxy.getAllGalaxies?.()[metaState.selectedSectorIndex];
+  const nextSkillGoal = getNextSkillGoal(game, metaState);
+  const failRetentionPercent = Math.round(getFailRetentionRate(game.skillTree) * 100);
   const stats = {
     'Day': metaState.day,
     [META_CURRENCY_LABEL]: metaState.resources,
@@ -19,8 +44,13 @@ export function renderStatsPanel(game, metaState) {
     'Resource Mult': `${Math.round(game.resourceMult * 100)}%`,
     'Run Time': `${gs.baseExpeditionTime + game.expeditionTimeBonus}s`,
     'Boss Progress': `${Math.round(game.bossProgressMult * 100)}%`,
+    'Next Skill': nextSkillGoal
+      ? nextSkillGoal.shortfall > 0
+        ? `${nextSkillGoal.title} (${nextSkillGoal.shortfall} short)`
+        : `${nextSkillGoal.title} READY`
+      : 'Clear more zones',
     'Runs': metaState.runCount,
-    'Fail Retention': '25%'
+    'Fail Retention': `${failRetentionPercent}%`
   };
 
   const currentResources = Object.entries(gs.resources)

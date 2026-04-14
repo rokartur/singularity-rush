@@ -39,19 +39,46 @@ export class SkillTree {
     return (node.prerequisites || []).filter((prerequisiteId) => !this.isPurchased(prerequisiteId));
   }
 
-  canPurchase(nodeId) {
+  getMissingZones(nodeId) {
     const node = this.getNode(nodeId);
-    if (!node || !this.meta) return false;
-    if (this.isPurchased(nodeId)) return false;
-    if (!this.meta.canAffordResources(node.cost)) return false;
-    if (this.getMissingPrerequisites(nodeId).length > 0) return false;
+    if (!node) return [];
 
-    const requiredZones = node.requiredZonesCleared || [];
-    if (requiredZones.some((zoneIndex) => !this.meta.isSectorCompleted(zoneIndex))) {
-      return false;
+    return (node.requiredZonesCleared || []).filter((zoneIndex) => !this.meta?.isSectorCompleted?.(zoneIndex));
+  }
+
+  getPurchaseBlocker(nodeId) {
+    const node = this.getNode(nodeId);
+    if (!node || !this.meta) {
+      return { code: 'unavailable', node };
     }
 
-    return true;
+    if (this.isPurchased(nodeId)) {
+      return { code: 'purchased', node };
+    }
+
+    const missingPrerequisites = this.getMissingPrerequisites(nodeId);
+    if (missingPrerequisites.length > 0) {
+      return { code: 'missing_prerequisites', node, missingPrerequisites };
+    }
+
+    const missingZones = this.getMissingZones(nodeId);
+    if (missingZones.length > 0) {
+      return { code: 'missing_zones', node, missingZones };
+    }
+
+    if (!this.meta.canAffordResources(node.cost)) {
+      return {
+        code: 'missing_resources',
+        node,
+        missingAmount: Math.max(0, Math.ceil(node.cost - this.meta.resources))
+      };
+    }
+
+    return null;
+  }
+
+  canPurchase(nodeId) {
+    return this.getPurchaseBlocker(nodeId) === null;
   }
 
   purchase(nodeId) {
@@ -96,12 +123,16 @@ export class SkillTree {
 
   getNodeState(nodeId) {
     const node = this.getNode(nodeId);
+    const blocker = this.getPurchaseBlocker(nodeId);
+
     return {
       node,
       isPurchased: this.isPurchased(nodeId),
-      canPurchase: this.canPurchase(nodeId),
+      canPurchase: blocker === null,
       cost: node?.cost ?? Infinity,
-      missingPrerequisites: this.getMissingPrerequisites(nodeId)
+      missingPrerequisites: this.getMissingPrerequisites(nodeId),
+      missingZones: this.getMissingZones(nodeId),
+      blocker
     };
   }
 }

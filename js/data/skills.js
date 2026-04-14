@@ -62,6 +62,18 @@ export default {
       tier: 1
     },
     {
+      id: 'targeting_uplink',
+      branch: 'offense',
+      title: 'Targeting Uplink',
+      description: 'Feeds fresh telemetry into the firing rig for chunkier hits.',
+      cost: 16,
+      prerequisites: ['crit_matrix'],
+      effectType: 'stat',
+      effectKey: 'click_damage_flat',
+      effectValue: 14,
+      tier: 2
+    },
+    {
       id: 'pulse_cannon_license',
       branch: 'offense',
       title: 'Pulse Cannon License',
@@ -96,6 +108,18 @@ export default {
       tier: 3
     },
     {
+      id: 'laser_overclock',
+      branch: 'offense',
+      title: 'Laser Overclock',
+      description: 'Pushes the weapon core harder for a late-run rate spike.',
+      cost: 54,
+      prerequisites: ['overcharge_chamber'],
+      effectType: 'stat',
+      effectKey: 'fire_rate',
+      effectValue: 0.55,
+      tier: 4
+    },
+    {
       id: 'quantum_driver_license',
       branch: 'offense',
       title: 'Quantum Driver License',
@@ -106,6 +130,18 @@ export default {
       effectType: 'unlock_weapon',
       effectValue: 'quantum_driver',
       tier: 4
+    },
+    {
+      id: 'singularity_cannon_license',
+      branch: 'offense',
+      title: 'Singularity Cannon License',
+      description: 'Unlocks the station\'s nastiest siege weapon for deep campaign pushes.',
+      cost: 88,
+      prerequisites: ['quantum_driver_license', 'laser_overclock'],
+      requiredZonesCleared: [5],
+      effectType: 'unlock_weapon',
+      effectValue: 'singularity_cannon',
+      tier: 5
     },
 
     {
@@ -144,6 +180,18 @@ export default {
       tier: 2
     },
     {
+      id: 'ablative_mesh',
+      branch: 'defense',
+      title: 'Ablative Mesh',
+      description: 'Adds a forgiving hull buffer that smooths out bad runs.',
+      cost: 24,
+      prerequisites: ['reinforced_bulkheads'],
+      effectType: 'stat',
+      effectKey: 'max_hp',
+      effectValue: 0.16,
+      tier: 2
+    },
+    {
       id: 'repair_drone_license',
       branch: 'defense',
       title: 'Repair Drone License',
@@ -152,6 +200,18 @@ export default {
       prerequisites: ['particle_screening'],
       effectType: 'unlock_module',
       effectValue: 'repair_drone',
+      tier: 3
+    },
+    {
+      id: 'capacitor_lattice',
+      branch: 'defense',
+      title: 'Capacitor Lattice',
+      description: 'Densifies the shield shell so mistakes are easier to recover from.',
+      cost: 36,
+      prerequisites: ['particle_screening'],
+      effectType: 'stat',
+      effectKey: 'shield',
+      effectValue: 0.12,
       tier: 3
     },
     {
@@ -165,6 +225,18 @@ export default {
       effectKey: 'passive_regen',
       effectValue: 0.02,
       tier: 4
+    },
+    {
+      id: 'triage_protocol',
+      branch: 'defense',
+      title: 'Triage Protocol',
+      description: 'Lets recovery systems catch up faster between heavy hits.',
+      cost: 60,
+      prerequisites: ['emergency_regen'],
+      effectType: 'stat',
+      effectKey: 'passive_regen',
+      effectValue: 0.025,
+      tier: 5
     },
 
     {
@@ -214,6 +286,30 @@ export default {
       tier: 2
     },
     {
+      id: 'survey_beacons',
+      branch: 'mining',
+      title: 'Survey Beacons',
+      description: 'Pays out harder when you clear a zone for the first time.',
+      cost: 28,
+      prerequisites: ['precision_extractors'],
+      effectType: 'stat',
+      effectKey: 'first_clear_bonus',
+      effectValue: 0.2,
+      tier: 3
+    },
+    {
+      id: 'scavenger_drones',
+      branch: 'mining',
+      title: 'Scavenger Drones',
+      description: 'Keeps vacuuming up scraps so every asteroid feels juicier.',
+      cost: 34,
+      prerequisites: ['cargo_expander_license'],
+      effectType: 'stat',
+      effectKey: 'resource_mult',
+      effectValue: 0.2,
+      tier: 3
+    },
+    {
       id: 'deep_core_reprocessing',
       branch: 'mining',
       title: 'Deep Core Reprocessing',
@@ -225,6 +321,19 @@ export default {
       effectKey: 'resource_mult',
       effectValue: 0.3,
       tier: 4
+    },
+    {
+      id: 'jackpot_relays',
+      branch: 'mining',
+      title: 'Jackpot Relays',
+      description: 'Late-game salvage routers turn dense sectors into payout fountains.',
+      cost: 68,
+      prerequisites: ['deep_core_reprocessing'],
+      requiredZonesCleared: [3],
+      effectType: 'stat',
+      effectKey: 'resource_mult',
+      effectValue: 0.36,
+      tier: 5
     },
 
     {
@@ -252,6 +361,30 @@ export default {
       tier: 1
     },
     {
+      id: 'drift_stabilizers',
+      branch: 'utility',
+      title: 'Drift Stabilizers',
+      description: 'Trims dead travel time so runs keep paying out faster.',
+      cost: 18,
+      prerequisites: ['vector_thrusters'],
+      effectType: 'stat',
+      effectKey: 'ship_speed',
+      effectValue: 34,
+      tier: 2
+    },
+    {
+      id: 'fallback_cache',
+      branch: 'utility',
+      title: 'Fallback Cache',
+      description: 'Stores extra salvage so failed pushes still feel worthwhile.',
+      cost: 22,
+      prerequisites: ['time_dilation'],
+      effectType: 'stat',
+      effectKey: 'fail_retention',
+      effectValue: 0.1,
+      tier: 2
+    },
+    {
       id: 'boss_scanner',
       branch: 'utility',
       title: 'Boss Scanner',
@@ -274,6 +407,18 @@ export default {
       effectKey: 'fire_rate',
       effectValue: 0.7,
       tier: 3
+    },
+    {
+      id: 'hunter_killer_link',
+      branch: 'utility',
+      title: 'Hunter-Killer Link',
+      description: 'Streams target locks straight into boss tracking subsystems.',
+      cost: 50,
+      prerequisites: ['cooldown_mesh'],
+      effectType: 'stat',
+      effectKey: 'boss_progress',
+      effectValue: 0.32,
+      tier: 4
     },
     {
       id: 'void_beam_license',

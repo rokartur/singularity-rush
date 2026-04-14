@@ -1,4 +1,5 @@
-import { META_CURRENCY_LABEL } from '../game/MetaState.js';
+import { META_CURRENCY_LABEL, getFailRetentionRate } from '../game/MetaState.js';
+import weaponsData from '../data/weapons.js';
 import { renderStatsPanel } from './StatsPanel.js';
 import { renderSectorsPanel } from './SectorsPanel.js';
 import { renderLoadoutTray } from './LoadoutTray.js';
@@ -18,6 +19,8 @@ export class StationScreen {
     this.skillTreePan = { x: null, y: null, zoom: null, dragging: false };
     this._skillTreeDrag = null;
     this._suppressSkillTreeClickUntil = 0;
+    this.stationStatus = null;
+    this._stationStatusTimer = null;
   }
 
   init() {
@@ -34,6 +37,9 @@ export class StationScreen {
   }
 
   _buildShell() {
+    const selectedSector = this.sectorsData[this.meta.selectedSectorIndex];
+    const failRetentionPercent = Math.round(getFailRetentionRate(this.game.skillTree) * 100);
+
     return `
       <div class="station-layout">
         <div class="station-nav">
@@ -46,6 +52,7 @@ export class StationScreen {
           <div class="nav-day">RUN ${this.meta.runCount}</div>
           <button class="nav-btn settings-btn" onclick="window.station.showSettings()">SETTINGS</button>
         </div>
+        ${this.stationStatus ? `<div class="station-status ${this.stationStatus.tone}" role="status">${this.stationStatus.message}</div>` : ''}
         <div class="station-body">
           <div class="station-center ${this.currentView === 'skills' ? 'skills-view' : ''}">
             ${this.currentView === 'campaign' ? this._renderCampaignView() : ''}
@@ -56,7 +63,10 @@ export class StationScreen {
             <div class="launch-section">
               <div class="launch-sector">${this._getSelectedSectorName()}</div>
               <div class="launch-meta">Boss payout: ${this._getSelectedSectorReward()} ${META_CURRENCY_LABEL}</div>
-              <div class="launch-meta">Failure keeps 25% of gathered ${META_CURRENCY_LABEL.toLowerCase()}</div>
+              <div class="launch-meta">Failure keeps ${failRetentionPercent}% of gathered ${META_CURRENCY_LABEL.toLowerCase()}</div>
+              ${selectedSector?.firstClearReward && !this.meta.isSectorCompleted(this.meta.selectedSectorIndex)
+                ? `<div class="launch-meta">First clear bonus: +${selectedSector.firstClearReward} ${META_CURRENCY_LABEL}</div>`
+                : ''}
               <button class="launch-btn" onclick="window.station.launch()">
                 ▶ LAUNCH
               </button>
@@ -129,15 +139,16 @@ export class StationScreen {
 
     viewport.addEventListener('pointerdown', (event) => {
       if (event.button !== 0) return;
+      if (event.target.closest('.skill-graph-node-wrap, .skill-tree-toolbar')) return;
 
-        this._skillTreeDrag = {
-          pointerId: event.pointerId,
-          startX: event.clientX,
-          startY: event.clientY,
-          originX: this.skillTreePan.x,
-          originY: this.skillTreePan.y,
-          moved: false
-        };
+      this._skillTreeDrag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: this.skillTreePan.x,
+        originY: this.skillTreePan.y,
+        moved: false
+      };
 
       this.skillTreePan.dragging = false;
       viewport.setPointerCapture(event.pointerId);
@@ -333,9 +344,27 @@ export class StationScreen {
   }
 
   purchaseSkillNode(nodeId) {
-    if (!this.game.skillTree.purchase(nodeId)) return;
+    const blocker = this.game.skillTree.getPurchaseBlocker(nodeId);
+    if (blocker) {
+      this._showStationStatus(this._formatPurchaseBlocker(blocker), 'warning');
+      return;
+    }
+
+    const node = this.game.skillTree.getNode(nodeId);
+    const unlockedWeaponsBefore = new Set(this.meta.unlockedWeapons);
+    const unlockedModulesBefore = new Set(this.meta.unlockedModules);
+
+    if (!this.game.skillTree.purchase(nodeId)) {
+      this._showStationStatus('Purchase failed. Try again.', 'warning');
+      return;
+    }
+
+    const autoEquipMessage = this._autoEquipRecentUnlock(unlockedWeaponsBefore, unlockedModulesBefore);
     this.game._recalcStats();
-    this.render();
+    this.game.save?.autoSave?.();
+
+    const successMessage = autoEquipMessage || this._formatPurchaseSuccess(node);
+    this._showStationStatus(successMessage, 'success');
   }
 
   equipWeaponFromArmory(weaponId) {
@@ -425,5 +454,83 @@ export class StationScreen {
 
     this.render();
     this.game._showStation();
+  }
+
+  _showStationStatus(message, tone = 'info', duration = 2600) {
+    this.stationStatus = { message, tone };
+    this.render();
+
+    if (this._stationStatusTimer) {
+      clearTimeout(this._stationStatusTimer);
+      this._stationStatusTimer = null;
+    }
+
+    if (!duration) return;
+
+    this._stationStatusTimer = setTimeout(() => {
+      if (this.stationStatus?.message !== message) return;
+      this.stationStatus = null;
+      this._stationStatusTimer = null;
+      this.render();
+    }, duration);
+  }
+
+  _formatPurchaseBlocker(blocker) {
+    if (!blocker?.node) return 'That upgrade is unavailable right now.';
+
+    if (blocker.code === 'missing_resources') {
+      return `Need ${blocker.missingAmount} more ${META_CURRENCY_LABEL} for ${blocker.node.title}.`;
+    }
+
+    if (blocker.code === 'missing_prerequisites') {
+      const titles = blocker.missingPrerequisites.map((nodeId) => this.game.skillTree.getNode(nodeId)?.title || nodeId);
+      return `Requires ${titles.join(', ')}.`;
+    }
+
+    if (blocker.code === 'missing_zones') {
+      return `Clear zone ${blocker.missingZones.map((zoneIndex) => zoneIndex + 1).join(', ')} first.`;
+    }
+
+    if (blocker.code === 'purchased') {
+      return `${blocker.node.title} is already online.`;
+    }
+
+    return `${blocker.node.title} is locked right now.`;
+  }
+
+  _formatPurchaseSuccess(node) {
+    if (!node) return 'Upgrade installed.';
+
+    if (node.effectType === 'unlock_weapon' || node.effectType === 'unlock_module') {
+      return `${this._getLoadoutItemName(node.effectValue)} unlocked.`;
+    }
+
+    return `${node.title} installed.`;
+  }
+
+  _autoEquipRecentUnlock(unlockedWeaponsBefore, unlockedModulesBefore) {
+    const newWeapon = this.meta.unlockedWeapons.find((weaponId) => !unlockedWeaponsBefore.has(weaponId));
+    if (newWeapon) {
+      const emptyWeaponSlot = this.meta.equippedWeapons.indexOf(null);
+      if (emptyWeaponSlot >= 0 && this.meta.equipWeapon(emptyWeaponSlot, newWeapon)) {
+        return `${this._getLoadoutItemName(newWeapon)} unlocked and auto-equipped.`;
+      }
+      return `${this._getLoadoutItemName(newWeapon)} unlocked.`;
+    }
+
+    const newModule = this.meta.unlockedModules.find((moduleId) => !unlockedModulesBefore.has(moduleId));
+    if (newModule) {
+      const emptyUtilitySlot = this.meta.utilitySlots.indexOf(null);
+      if (emptyUtilitySlot >= 0 && this.meta.equipUtility(emptyUtilitySlot, newModule)) {
+        return `${this._getLoadoutItemName(newModule)} unlocked and auto-equipped.`;
+      }
+      return `${this._getLoadoutItemName(newModule)} unlocked.`;
+    }
+
+    return null;
+  }
+
+  _getLoadoutItemName(itemId) {
+    return weaponsData.find((item) => item.id === itemId)?.name || itemId;
   }
 }

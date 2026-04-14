@@ -5,6 +5,7 @@ import { Projectile } from './Projectile.js';
 import { ComboSystem } from './Combo.js';
 import { Galaxy } from './Galaxy.js';
 import { calculateCombatStats } from './StatCalculator.js';
+import { DEFAULT_FAIL_RETENTION } from './MetaState.js';
 import { ParticleSystem } from '../rendering/Particles.js';
 import { ScreenEffects } from '../rendering/Effects.js';
 import { UIManager } from '../rendering/UI.js';
@@ -297,7 +298,7 @@ export class Game {
       if (timer) timer.style.display = 'none';
 
       if (this._metaState) {
-        this._metaState.completeRun(this.gs.expeditionState, sectorsData);
+        this._metaState.completeRun(this.gs.expeditionState, sectorsData, this.skillTree);
         this._syncMetaProgression();
       }
 
@@ -794,17 +795,23 @@ export class Game {
     const enemyResources = Math.max(0, Math.floor(summary.resourcesFromEnemies || 0));
     const bossResources = Math.max(0, Math.floor(summary.resourcesFromBoss || 0));
     const totalResources = Math.max(0, Math.floor(summary.resourcesCollected || 0));
-    const retainedResources = successful
-      ? totalResources
-      : Math.floor(totalResources * 0.25);
+    const retainedResources = Math.max(0, Math.floor(
+      summary.resourcesRetained
+      ?? (successful
+        ? totalResources
+        : totalResources * (summary.failRetentionRate ?? DEFAULT_FAIL_RETENTION))
+    ));
+    const firstClearBonus = Math.max(0, Math.floor(summary.firstClearBonus || 0));
+    const failRetentionPercent = Math.round((summary.failRetentionRate ?? DEFAULT_FAIL_RETENTION) * 100);
 
     content.innerHTML = `
       <div class="summary-row"><span>Zone</span><span class="summary-val">${summary.zoneName || `Zone ${summary.zoneIndex + 1}`}</span></div>
-      <div class="summary-row"><span>Status</span><span class="summary-val ${successful ? 'green' : 'red'}">${successful ? 'Boss defeated' : 'Retained 25% on fail'}</span></div>
+      <div class="summary-row"><span>Status</span><span class="summary-val ${successful ? 'green' : 'red'}">${successful ? 'Boss defeated' : `Retained ${failRetentionPercent}% on fail`}</span></div>
       <div class="summary-row"><span>Asteroids</span><span class="summary-val">${formatNumber(asteroidResources)}</span></div>
       <div class="summary-row"><span>Enemies</span><span class="summary-val">${formatNumber(enemyResources)}</span></div>
       <div class="summary-row"><span>Boss</span><span class="summary-val gold">${formatNumber(bossResources)}</span></div>
       <div class="summary-row"><span>Total Resources</span><span class="summary-val">${formatNumber(totalResources)}</span></div>
+      ${firstClearBonus > 0 ? `<div class="summary-row"><span>First Clear Bonus</span><span class="summary-val gold">+${formatNumber(firstClearBonus)}</span></div>` : ''}
       <div class="summary-row"><span>Retained</span><span class="summary-val gold">+${formatNumber(retainedResources)} ${this.resourcesData?.resources.resources?.name || 'resources'}</span></div>
       <div class="summary-row"><span>Destroyed</span><span class="summary-val">${summary.asteroidsDestroyed}</span></div>
       <div class="summary-row"><span>Max Combo</span><span class="summary-val gold">x${summary.maxCombo}</span></div>
