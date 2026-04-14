@@ -13,7 +13,7 @@ export class GameState {
     this.prestigeLevel = 0;
     this.level = 1;
     this.xp = 0;
-    this.resources = { iron: 0, nickel: 0 };
+    this.resources = { resources: 0 };
     this.hp = 100;
     this.maxHp = 100;
     this.shield = 0;
@@ -33,8 +33,16 @@ export class GameState {
       active: false,
       timeRemaining: 0,
       maxTime: 15,
+      success: false,
+      bossDefeated: false,
+      zoneIndex: 0,
+      zoneName: 'Asteroid Belt',
+      resourcesFromAsteroids: 0,
+      resourcesFromEnemies: 0,
+      resourcesFromBoss: 0,
+      resourcesCollected: 0,
+      resourcesRetained: 0,
       asteroidsDestroyed: 0,
-      resourcesGathered: {},
       xpGained: 0,
       maxCombo: 0,
       score: 0
@@ -115,9 +123,29 @@ export class GameState {
 
   addResource(type, amount) {
     if (!this.resources[type]) this.resources[type] = 0;
-    this.resources[type] += amount;
-    this.statistics.resourcesCollected += amount;
+    this.resources[type] += Math.max(0, Math.floor(amount));
+    this.statistics.resourcesCollected += Math.max(0, Math.floor(amount));
     this.emit('resourceGained', { type, amount });
+  }
+
+  addRunResources(source, amount) {
+    const normalizedAmount = Math.max(0, Math.floor(amount));
+    if (normalizedAmount <= 0) return 0;
+
+    this.addResource('resources', normalizedAmount);
+
+    if (!this.expeditionState.active) return normalizedAmount;
+
+    if (source === 'asteroid') {
+      this.expeditionState.resourcesFromAsteroids += normalizedAmount;
+    } else if (source === 'enemy') {
+      this.expeditionState.resourcesFromEnemies += normalizedAmount;
+    } else if (source === 'boss') {
+      this.expeditionState.resourcesFromBoss += normalizedAmount;
+    }
+
+    this.expeditionState.resourcesCollected += normalizedAmount;
+    return normalizedAmount;
   }
 
   removeResource(type, amount) {
@@ -179,14 +207,23 @@ export class GameState {
     }
   }
 
-  startExpedition() {
+  startExpedition(config = {}) {
     const maxTime = this.baseExpeditionTime + this.expeditionTimeBonus;
+    this.resources = { resources: 0 };
     this.expeditionState = {
       active: true,
       timeRemaining: maxTime,
       maxTime,
+      success: false,
+      bossDefeated: false,
+      zoneIndex: config.zoneIndex ?? this.currentGalaxyIndex,
+      zoneName: config.zoneName ?? `Zone ${this.currentGalaxyIndex + 1}`,
+      resourcesFromAsteroids: 0,
+      resourcesFromEnemies: 0,
+      resourcesFromBoss: 0,
+      resourcesCollected: 0,
+      resourcesRetained: 0,
       asteroidsDestroyed: 0,
-      resourcesGathered: {},
       xpGained: 0,
       maxCombo: 0,
       score: 0

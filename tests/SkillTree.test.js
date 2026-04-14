@@ -1,33 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
-import { GameState } from '../js/game/GameState.js';
 import skills from '../js/data/skills.js';
+import { MetaState } from '../js/game/MetaState.js';
 import { SkillTree } from '../js/systems/SkillTree.js';
 
 describe('SkillTree', () => {
-  it('uses resource currencies and prerequisite chains', () => {
-    const gs = new GameState();
-    const tree = new SkillTree(gs);
+  it('uses meta currency and prerequisite chains', () => {
+    const meta = new MetaState();
+    const tree = new SkillTree(meta);
     tree.loadData(skills);
 
-    expect(tree.canUnlock('helium_scope')).toBe(false);
+    expect(tree.canPurchase('plasma_rifle_license')).toBe(false);
 
-    gs.addResource('iron', 30);
-    expect(tree.canUnlock('iron_lattice')).toBe(true);
-    expect(tree.unlock('iron_lattice')).toBe(true);
-    expect(gs.resources.iron).toBe(6);
-    expect(tree.canUnlock('crystal_clock')).toBe(false);
+    meta.addResources(100);
+    expect(tree.canPurchase('core_targeting')).toBe(true);
+    expect(tree.purchase('core_targeting')).toBe(true);
+    expect(meta.resources).toBe(94);
+    expect(tree.canPurchase('plasma_rifle_license')).toBe(false);
   });
 
-  it('charges scaled resource costs and sums flat node effects', () => {
-    const gs = new GameState();
-    const tree = new SkillTree(gs);
+  it('charges fixed node costs and sums purchased stat effects', () => {
+    const meta = new MetaState();
+    const tree = new SkillTree(meta);
     tree.loadData(skills);
 
-    gs.addResource('iron', 100);
-    expect(tree.unlock('iron_lattice')).toBe(true);
-    expect(tree.getNodeCost('iron_lattice')).toBe(Math.floor(24 * 1.55));
-    expect(tree.unlock('iron_lattice')).toBe(true);
+    meta.addResources(100);
+    expect(tree.purchase('core_targeting')).toBe(true);
+    expect(tree.getNodeCost('core_targeting')).toBe(6);
+    expect(tree.purchase('core_targeting')).toBe(false);
     expect(tree.getTotalEffect('click_damage_flat')).toBe(8);
   });
 });

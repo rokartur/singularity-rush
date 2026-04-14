@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { GameState } from '../js/game/GameState.js';
+import { MetaState } from '../js/game/MetaState.js';
 import { SaveManager } from '../js/utils/SaveManager.js';
 
 function createStorageMock() {
@@ -35,7 +36,7 @@ describe('SaveManager', () => {
     source.currentGalaxyIndex = 2;
     source.level = 7;
     source.xp = 11;
-    source.resources.antimatter = 5;
+    source.resources.resources = 5;
     source.hp = 88;
     source.maxHp = 140;
     source.shield = 35;
@@ -60,7 +61,7 @@ describe('SaveManager', () => {
 
     expect(target.currentGalaxyIndex).toBe(2);
     expect(target.level).toBe(7);
-    expect(target.resources.antimatter).toBe(5);
+    expect(target.resources.resources).toBe(5);
     expect(target.skillLevels).toEqual({ iron_lattice: 2 });
     expect(target.unlockedGalaxies).toEqual([0, 1, 2]);
     expect(target.completedGalaxies).toEqual([0, 1]);
@@ -147,5 +148,31 @@ describe('SaveManager', () => {
 
     expect(target.maxHp).toBe(130);
     expect(target.hp).toBe(120);
+  });
+
+  it('migrates legacy metaCurrency into permanent resources', () => {
+    const target = new GameState();
+    const meta = new MetaState();
+    const manager = new SaveManager(target, meta);
+
+    manager.loadFromData({
+      version: '5.0.0',
+      galaxy: 0,
+      resources: { iron: 0, nickel: 0 },
+      meta: {
+        metaCurrency: 27,
+        selectedZone: 0,
+        unlockedZones: [0],
+        clearedZones: [],
+        purchasedSkillNodes: [],
+        unlockedWeapons: ['basic_laser'],
+        unlockedModules: [],
+        unlockedSystems: [],
+        equippedWeapons: ['basic_laser', null],
+        utilitySlots: [null]
+      }
+    });
+
+    expect(meta.resources).toBe(27);
   });
 });

@@ -1,5 +1,6 @@
 export default {
   "resources": {
+    "resources": { "name": "Resources", "color": "#50c878", "value": 1 },
     "iron": { "name": "Żelazo", "color": "#a8a8a8", "value": 1 },
     "nickel": { "name": "Nikiel", "color": "#c0c0c0", "value": 2 },
     "helium3": { "name": "Hel-3", "color": "#87ceeb", "value": 8 },

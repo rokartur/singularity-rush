@@ -1,5 +1,7 @@
 import { GameState } from './GameState.js';
 import { Asteroid, AsteroidManager } from './Asteroid.js';
+import { Ship } from './Ship.js';
+import { Projectile } from './Projectile.js';
 import { ComboSystem } from './Combo.js';
 import { Galaxy } from './Galaxy.js';
 import { calculateCombatStats } from './StatCalculator.js';
@@ -9,13 +11,21 @@ import { UIManager } from '../rendering/UI.js';
 import { SaveManager } from '../utils/SaveManager.js';
 import { SkillTree } from '../systems/SkillTree.js';
 import { audio } from '../utils/Audio.js';
-import { formatNumber, randomRange } from '../utils/Math.js';
+import { formatNumber, randomRange, dist } from '../utils/Math.js';
 import galaxiesData from '../data/galaxies.js';
+import sectorsData from '../data/sectors.js';
 import skillsData from '../data/skills.js';
 import resourcesData from '../data/resources.js';
+import weaponsData from '../data/weapons.js';
+
+const PROJ_SPEED = 600;
+const BASE_FIRE_RATE = 3.0;
+const BASE_SHIP_SPEED = 220;
+const BASE_ASTEROID_RESOURCE_REWARD = 1;
+const BASE_ENEMY_RESOURCE_REWARD = 2;
 
 export class Game {
-  constructor() {
+  constructor(metaState) {
     this.canvas = document.getElementById('game-canvas');
     this.ctx = this.canvas.getContext('2d');
 
@@ -25,9 +35,14 @@ export class Game {
     this.asteroidMgr = new AsteroidManager();
     this.combo = new ComboSystem(this.gs);
     this.galaxy = new Galaxy(this.gs);
-    this.skillTree = new SkillTree(this.gs);
+    this.skillTree = new SkillTree(metaState || null);
     this.ui = new UIManager(this.gs);
-    this.save = new SaveManager(this.gs);
+
+    this._metaState = metaState || null;
+    this.save = new SaveManager(this.gs, this._metaState);
+
+    this._ship = null;
+    this._projectiles = [];
 
     this.lastFrame = 0;
     this.running = false;
@@ -44,9 +59,10 @@ export class Game {
     this.bonusResourceChance = 0;
     this.rareDropMult = 1;
     this.expeditionTimeBonus = 0;
+    this.fireRate = BASE_FIRE_RATE;
+    this.shipSpeed = BASE_SHIP_SPEED;
     this.boss = null;
 
-    this._pendingClicks = [];
     this._setupEvents();
   }
 
@@ -56,15 +72,17 @@ export class Game {
 
     audio.init();
 
-    this.galaxy.loadData(galaxiesData);
+    this.galaxy.loadData(sectorsData);
     this.skillTree.loadData(skillsData);
+    this.skillTree.bindMetaState(this._metaState);
     this.resourcesData = resourcesData;
 
     if (this.save.hasAutoSave()) {
       this.save.loadAutoSave();
     }
 
-    this.galaxy.loadData(galaxiesData);
+    this._syncMetaProgression();
+    this.galaxy.loadData(sectorsData);
     this.asteroidMgr.setGalaxy(this.galaxy.getCurrent());
     this._generateStars();
     this.boss = this.gs.bossState;
@@ -78,16 +96,46 @@ export class Game {
     this.ui.initRollers();
     this._setupGameListeners();
 
-    this._updateMenuVisibility();
-    this._updateStartButton();
-
     this.gs.emit('gameReady', {});
+
+    // Show station, hide game area
+    this._showStation();
+
     this.running = true;
     requestAnimationFrame((t) => this._loop(t));
   }
 
+  _syncMetaProgression() {
+    if (!this._metaState) return;
+
+    this.gs.currentGalaxyIndex = this._metaState.selectedSectorIndex;
+    this.gs.unlockedGalaxies = [...this._metaState.unlockedSectors];
+    this.gs.completedGalaxies = [...this._metaState.completedSectors];
+    this.galaxy._updateCurrent();
+  }
+
+  _showStation() {
+    const station = document.getElementById('station-wrapper');
+    const gameArea = document.getElementById('game-area');
+    if (station) station.classList.remove('hidden');
+    if (gameArea) gameArea.classList.remove('active');
+
+    if (this._stationInit) {
+      this._stationInit();
+    }
+  }
+
+  _showGameArea() {
+    const station = document.getElementById('station-wrapper');
+    const gameArea = document.getElementById('game-area');
+    if (station) station.classList.add('hidden');
+    if (gameArea) gameArea.classList.add('active');
+    this._resizeCanvas();
+  }
+
   _resizeCanvas() {
-    const container = this.canvas.parentElement;
+    const container = this.canvas?.parentElement;
+    if (!container) return;
     this.canvas.width = container.clientWidth;
     this.canvas.height = container.clientHeight;
     this.ctx.imageSmoothingEnabled = false;
@@ -99,8 +147,8 @@ export class Game {
     const count = this.galaxy.getCurrent()?.starDensity || 60;
     for (let i = 0; i < count; i++) {
       this.stars.push({
-        x: Math.random() * this.canvas.width,
-        y: Math.random() * this.canvas.height,
+        x: Math.random() * (this.canvas?.width || 800),
+        y: Math.random() * (this.canvas?.height || 600),
         size: Math.random() * 2 + 0.5,
         brightness: Math.random() * 0.8 + 0.2,
         twinkleSpeed: Math.random() * 2 + 1,
@@ -110,11 +158,15 @@ export class Game {
   }
 
   _setupEvents() {
-    this.canvas.addEventListener('click', (e) => {
+    // Mouse tracking for ship follow
+    this.canvas.addEventListener('mousemove', (e) => {
       const rect = this.canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      this._pendingClicks.push({ x, y });
+      if (this._ship) {
+        this._ship.setMouseTarget(e.clientX - rect.left, e.clientY - rect.top);
+      }
+    });
+
+    this.canvas.addEventListener('click', () => {
       audio.resume();
     });
 
@@ -133,7 +185,6 @@ export class Game {
       this.effects.shake(5, 0.3);
       this.particles.emitScreenFlash('#f0c040', 0.2);
       this._recalcStats();
-      this._updateMenuVisibility();
     });
 
     this.gs.on('comboMilestone', ({ level }) => {
@@ -148,7 +199,6 @@ export class Game {
       this.asteroidMgr.setGalaxy(this.galaxy.getCurrent());
       this._generateStars();
       this._recalcStats();
-      this._updateMenuVisibility();
     });
 
     this.gs.on('galaxyTraveled', ({ index }) => {
@@ -158,7 +208,6 @@ export class Game {
       this.asteroidMgr.setGalaxy(this.galaxy.getCurrent());
       this._generateStars();
       this._recalcStats();
-      this._updateMenuVisibility();
     });
 
     this.gs.on('bossSpawn', ({ data }) => {
@@ -186,15 +235,23 @@ export class Game {
       this.effects.shake(12, 0.6);
       this.particles.emitScreenFlash('#ffd700', 0.3);
       this._clearBossEncounter();
-      const label = Object.entries(reward.resources || {})
-        .map(([key, value]) => `+${formatNumber(value)} ${this.resourcesData?.resources[key]?.name || key}`)
-        .join('  ');
+      const bossResources = Math.max(0, Math.floor(reward.resources ?? this.galaxy.getCurrent()?.resourceReward ?? 0));
+      const gained = this.gs.addRunResources('boss', bossResources);
+      const label = gained > 0
+        ? `+${formatNumber(gained)} ${this.resourcesData?.resources.resources?.name || 'resources'}`
+        : '';
       if (label) {
         this.ui.addFloatingText(this.canvas.width / 2, 90, label, '#ffd700', 20);
       }
+
+      if (this.gs.expeditionState.active) {
+        this.gs.expeditionState.success = true;
+        this.gs.expeditionState.bossDefeated = true;
+        this.gs.endExpedition();
+      }
     });
 
-    this.gs.on('skillUpgraded', () => {
+    this._metaState?.on('skillTreeChanged', () => {
       audio.upgrade();
       this._recalcStats();
     });
@@ -211,22 +268,39 @@ export class Game {
         this.galaxy._syncBossProgress();
         this._clearBossEncounter();
       }
+
+      if (this.gs.expeditionState.active) {
+        this.gs.expeditionState.success = false;
+        this.gs.expeditionState.bossDefeated = false;
+        this.gs.endExpedition();
+      }
     });
 
     this.gs.on('expeditionStart', () => {
       this.asteroidMgr.setGalaxy(this.galaxy.getCurrent());
-      this._updateMenuVisibility();
-      this._updateStartButton();
+      this._showGameArea();
+
+      // Create ship at canvas center
+      this._ship = new Ship(this.canvas.width / 2, this.canvas.height / 2);
+      this._projectiles = [];
+
       const timer = document.getElementById('expedition-timer');
       if (timer) timer.style.display = 'block';
     });
 
     this.gs.on('expeditionEnd', () => {
       this.asteroidMgr.asteroids = [];
-      this._updateMenuVisibility();
-      this._updateStartButton();
+      this._ship = null;
+      this._projectiles = [];
+
       const timer = document.getElementById('expedition-timer');
       if (timer) timer.style.display = 'none';
+
+      if (this._metaState) {
+        this._metaState.completeRun(this.gs.expeditionState, sectorsData);
+        this._syncMetaProgression();
+      }
+
       this._showRunSummary();
     });
   }
@@ -234,7 +308,8 @@ export class Game {
   _recalcStats() {
     const stats = calculateCombatStats({
       gs: this.gs,
-      skillTree: this.skillTree
+      skillTree: this.skillTree,
+      metaState: this._metaState
     });
 
     this.clickDamage = stats.clickDamage;
@@ -249,6 +324,8 @@ export class Game {
     this.bonusResourceChance = stats.bonusResourceChance;
     this.rareDropMult = stats.rareDropMult;
     this.expeditionTimeBonus = stats.expeditionTimeBonus;
+    this.fireRate = stats.fireRate;
+    this.shipSpeed = stats.shipSpeed;
     this.gs.expeditionTimeBonus = stats.expeditionTimeBonus;
 
     const hpRatio = this.gs.maxHp > 0 ? this.gs.hp / this.gs.maxHp : 1;
@@ -256,8 +333,129 @@ export class Game {
     this.gs.hp = Math.min(this.gs.maxHp, this.gs.maxHp * hpRatio);
     this.gs.maxShield = Math.round(stats.maxShield);
     this.gs.shield = Math.min(this.gs.shield, this.gs.maxShield);
-    this._updateEquipmentDisplay();
   }
+
+  // --- Weapon stats ---
+
+  _getWeaponStats() {
+    const weaponId = this._metaState?.equippedWeapons?.[0] || 'basic_laser';
+    const weapon = weaponsData.find(w => w.id === weaponId);
+    return weapon?.stats || { damage: 1.0, fireRate: 1.0 };
+  }
+
+  _getEnemies() {
+    const enemies = this.asteroidMgr.asteroids.filter(a => a.alive);
+    if (this.boss && this.boss.alive) {
+      enemies.push({ x: this.canvas.width / 2, y: 120 });
+    }
+    return enemies;
+  }
+
+  // --- Combat ---
+
+  _fireProjectile() {
+    const weaponStats = this._getWeaponStats();
+    const baseDamage = this.clickDamage * (weaponStats.damage || 1);
+    const actualFireRate = this.fireRate * (weaponStats.fireRate || 1);
+    this._ship.setFireCooldown(1 / actualFireRate);
+
+    const spawn = this._ship.getProjectileSpawn();
+    const proj = new Projectile(
+      spawn.x, spawn.y,
+      Math.cos(spawn.angle) * PROJ_SPEED,
+      Math.sin(spawn.angle) * PROJ_SPEED,
+      baseDamage,
+      spawn.angle
+    );
+    this._projectiles.push(proj);
+  }
+
+  _updateProjectiles(dt) {
+    for (const proj of this._projectiles) {
+      proj.update(dt);
+
+      if (proj.isOffScreen(this.canvas.width, this.canvas.height)) {
+        proj.alive = false;
+        continue;
+      }
+
+      // Check collision with asteroids
+      let hit = false;
+      for (const asteroid of this.asteroidMgr.asteroids) {
+        if (!asteroid.alive) continue;
+        const d = dist(proj.x, proj.y, asteroid.x, asteroid.y);
+        if (d < proj.radius + asteroid.radius) {
+          this.combo.registerClick();
+          let damage = proj.baseDamage * this.combo.multiplier;
+          let isCrit = Math.random() < this.critChance;
+
+          if (isCrit) {
+            damage *= this.critMult;
+            audio.criticalHit();
+            this.effects.shake(6, 0.3);
+            this.particles.emitCritical(proj.x, proj.y);
+            this.ui.addFloatingText(proj.x, proj.y - 30, `CRIT! ${formatNumber(damage)}`, '#ff0040', 36);
+          } else {
+            this.ui.addFloatingText(proj.x, proj.y - 20, formatNumber(damage), '#009dff', 28);
+          }
+
+          const killed = asteroid.takeDamage(damage);
+          this.gs.statistics.totalDamage += damage;
+          this.particles.emitTrail(proj.x, proj.y, isCrit ? '#ff0040' : '#009dff');
+          audio.clickHit(this.combo.count);
+
+          if (killed) {
+            this._onAsteroidKilled(asteroid);
+          }
+
+          proj.alive = false;
+          hit = true;
+          break;
+        }
+      }
+
+      // Check collision with boss
+      if (!hit && this.boss && this.boss.alive) {
+        const bx = this.canvas.width / 2;
+        const by = 120;
+        const bossRadius = 60;
+        const d = dist(proj.x, proj.y, bx, by);
+        if (d < proj.radius + bossRadius) {
+          this.combo.registerClick();
+          let damage = proj.baseDamage * this.combo.multiplier;
+          let isCrit = Math.random() < this.critChance;
+
+          if (isCrit) damage *= this.critMult;
+          this._damageBoss(damage, proj.x, proj.y, isCrit);
+
+          proj.alive = false;
+        }
+      }
+    }
+
+    this._projectiles = this._projectiles.filter(p => p.alive);
+  }
+
+  _checkShipCollisions() {
+    if (!this._ship || !this._ship.alive) return;
+
+    for (const asteroid of this.asteroidMgr.asteroids) {
+      if (!asteroid.alive) continue;
+      const d = dist(this._ship.x, this._ship.y, asteroid.x, asteroid.y);
+      if (d < this._ship.size + asteroid.radius) {
+        if (this._ship.takeDamage()) {
+          const damage = Math.max(1, Math.ceil(asteroid.maxHp * 0.05));
+          this.gs.takeDamage(damage);
+          this.effects.shake(4, 0.2);
+          const angle = Math.atan2(this._ship.y - asteroid.y, this._ship.x - asteroid.x);
+          this._ship.x += Math.cos(angle) * 15;
+          this._ship.y += Math.sin(angle) * 15;
+        }
+      }
+    }
+  }
+
+  // --- Game loop ---
 
   _loop(timestamp) {
     if (!this.running) {
@@ -272,14 +470,32 @@ export class Game {
     this._render(dt);
 
     this.gs.flushNotifications();
+    if (this._metaState) this._metaState.flushNotifications();
     requestAnimationFrame((t) => this._loop(t));
   }
 
   _update(dt) {
     this.gs.statistics.playtime += dt;
+    this.save.update(dt);
 
     if (this.gs.isExpeditionActive()) {
-      this._processClicks();
+      // Ship follows mouse + auto-aim
+      const enemies = this._getEnemies();
+      if (this._ship) {
+        this._ship.update(dt, this.canvas.width, this.canvas.height, enemies, this.shipSpeed);
+
+        // Auto-fire when enemies present
+        if (this._ship.canFire() && enemies.length > 0) {
+          this._fireProjectile();
+        }
+      }
+
+      // Update projectiles + collision
+      this._updateProjectiles(dt);
+
+      // Ship-asteroid collision
+      this._checkShipCollisions();
+
       this.combo.update(dt);
       this.asteroidMgr.update(dt, this.canvas.width, this.canvas.height, 6 + this.gs.currentGalaxyIndex * 2);
       this.particles.update(dt);
@@ -300,7 +516,6 @@ export class Game {
     }
 
     this.ui.update(dt);
-    this.save.update(dt);
     this.ui.updateHUD();
     this.ui.updateCombo(this.combo.getComboData());
   }
@@ -319,60 +534,16 @@ export class Game {
       const time = Math.max(0, Math.ceil(ex.timeRemaining));
       timerEl.textContent = `${time}s`;
       if (ex.timeRemaining <= 5) {
-        timerEl.style.color = '#ff4444';
+        timerEl.style.color = '#c0392b';
       } else if (ex.timeRemaining <= 10) {
-        timerEl.style.color = '#f0c040';
+        timerEl.style.color = '#d4a843';
       } else {
-        timerEl.style.color = '#00ff88';
+        timerEl.style.color = '#50c878';
       }
     }
 
     if (ex.timeRemaining <= 0) {
       this.gs.endExpedition();
-    }
-  }
-
-  _processClicks() {
-    for (const click of this._pendingClicks) {
-      this._handleClick(click.x, click.y);
-    }
-    this._pendingClicks = [];
-  }
-
-  _handleClick(x, y) {
-    if (!this.gs.isExpeditionActive()) return;
-
-    this.gs.recordClick();
-    this.combo.registerClick();
-    audio.clickHit(this.combo.count);
-
-    if (this.boss && this.boss.alive) {
-      this._damageBoss(x, y);
-      return;
-    }
-
-    const asteroid = this.asteroidMgr.getAsteroidAt(x, y);
-    if (asteroid) {
-      let damage = this.clickDamage * this.combo.multiplier;
-      let isCrit = Math.random() < this.critChance;
-
-      if (isCrit) {
-        damage *= this.critMult;
-        audio.criticalHit();
-        this.effects.shake(6, 0.3);
-        this.particles.emitCritical(x, y);
-        this.ui.addFloatingText(x, y - 30, `CRIT! ${formatNumber(damage)}`, '#ff0040', 36);
-      } else {
-        this.ui.addFloatingText(x, y - 20, formatNumber(damage), '#009dff', 28);
-      }
-
-      const killed = asteroid.takeDamage(damage);
-      this.gs.statistics.totalDamage += damage;
-      this.particles.emitTrail(x, y, isCrit ? '#ff0040' : '#009dff');
-
-      if (killed) {
-        this._onAsteroidKilled(asteroid);
-      }
     }
   }
 
@@ -384,34 +555,25 @@ export class Game {
 
     const galaxyData = this.galaxy.getCurrent();
     if (galaxyData) {
-      const res = galaxyData.resources;
-      const mainRes = res[0];
-      const amount = (asteroid.maxHp / 15) * this.resourceMult;
-      this.gs.addResource(mainRes, amount);
-      this.particles.emitResource(asteroid.x, asteroid.y, this.resourcesData?.resources[mainRes]?.color || '#fff');
-      this.ui.addFloatingText(asteroid.x, asteroid.y + 20, `+${formatNumber(amount)} ${mainRes}`, '#50c878', 20);
+      const amount = Math.max(1, Math.round(BASE_ASTEROID_RESOURCE_REWARD * this.resourceMult));
+      const gained = this.gs.addRunResources('asteroid', amount);
+      this.particles.emitResource(asteroid.x, asteroid.y, this.resourcesData?.resources.resources?.color || '#50c878');
+      this.ui.addFloatingText(asteroid.x, asteroid.y + 20, `+${formatNumber(gained)} resources`, '#50c878', 20);
 
       if (this.gs.expeditionState.active) {
-        if (!this.gs.expeditionState.resourcesGathered[mainRes]) {
-          this.gs.expeditionState.resourcesGathered[mainRes] = 0;
-        }
-        this.gs.expeditionState.resourcesGathered[mainRes] += amount;
+        this.gs.expeditionState.score += gained;
       }
 
-      if (res.length > 1 && Math.random() < Math.min(1, 0.25 + this.bonusResourceChance)) {
-        const bonusRes = res[Math.floor(Math.random() * res.length)];
-        const bonusAmount = amount * 0.15;
-        this.gs.addResource(bonusRes, bonusAmount);
-      }
-
-      if (this.gs.expeditionState.active) {
-        this.gs.expeditionState.score += amount;
-      }
-
-      this.galaxy.addBossProgress(amount * this.bossProgressMult);
+      this.galaxy.addBossProgress((asteroid.maxHp / 15) * this.bossProgressMult);
       this._updateBossProgress();
     }
   }
+
+  _getEnemyResourceReward(baseReward = BASE_ENEMY_RESOURCE_REWARD) {
+    return Math.max(1, Math.round(baseReward * this.resourceMult));
+  }
+
+  // --- Boss ---
 
   _updateBoss(dt) {
     const boss = this.boss;
@@ -455,12 +617,9 @@ export class Game {
     this._renderBossHP();
   }
 
-  _damageBoss(x, y) {
+  _damageBoss(damage, x, y, isCrit = false) {
     const boss = this.boss;
-    let damage = this.clickDamage * this.combo.multiplier;
-    let isCrit = Math.random() < this.critChance;
     if (isCrit) {
-      damage *= this.critMult;
       audio.criticalHit();
       this.particles.emitCritical(x, y);
     }
@@ -478,6 +637,8 @@ export class Game {
     }
   }
 
+  // --- Rendering ---
+
   _render(dt) {
     const ctx = this.ctx;
     const w = this.canvas.width;
@@ -491,6 +652,13 @@ export class Game {
 
     if (this.gs.isExpeditionActive()) {
       this.asteroidMgr.render(ctx);
+
+      for (const proj of this._projectiles) {
+        proj.render(ctx);
+      }
+
+      if (this._ship) this._ship.render(ctx);
+
       this.particles.render(ctx, w, h);
       this.ui.renderFloatingTexts(ctx);
 
@@ -584,7 +752,11 @@ export class Game {
 
   startExpedition() {
     if (this.gs.isExpeditionActive()) return;
-    this.gs.startExpedition();
+    const currentZone = this.galaxy.getCurrent();
+    this.gs.startExpedition({
+      zoneIndex: this.gs.currentGalaxyIndex,
+      zoneName: currentZone?.name
+    });
   }
 
   travelToGalaxy(index) {
@@ -601,81 +773,50 @@ export class Game {
     }
 
     return {
-      success: this.galaxy.unlock(index),
+      success: this.galaxy.travel(index),
       reason: 'ok'
     };
-  }
-
-  _updateMenuVisibility() {
-    const inExpedition = this.gs.isExpeditionActive();
-    const btns = ['btn-skills', 'btn-map', 'btn-stats', 'btn-settings'];
-    for (const id of btns) {
-      const btn = document.getElementById(id);
-      if (btn) {
-        btn.style.opacity = inExpedition ? '0.3' : '1';
-        btn.style.pointerEvents = inExpedition ? 'none' : 'auto';
-      }
-    }
-    const btnGame = document.getElementById('btn-game');
-    if (btnGame) {
-      btnGame.style.display = inExpedition ? 'block' : 'none';
-    }
-    if (inExpedition && window.gameUI) {
-      window.gameUI.switchTab('game');
-    } else if (!inExpedition && window.gameUI) {
-      const gameTab = document.getElementById('tab-game');
-      if (gameTab && gameTab.classList.contains('active')) {
-        window.gameUI.showSkills();
-      }
-    }
-  }
-
-  _updateStartButton() {
-    const btn = document.getElementById('btn-start-expedition');
-    if (btn) {
-      btn.style.display = this.gs.isExpeditionActive() ? 'none' : 'block';
-    }
   }
 
   _showRunSummary() {
     const summary = this.gs.expeditionState;
     const panel = document.getElementById('run-summary');
     const content = document.getElementById('run-summary-content');
+    const title = panel?.querySelector('.panel-title');
     if (!panel || !content) return;
 
-    const resEntries = Object.entries(summary.resourcesGathered || {});
-    const resHTML = resEntries.length > 0
-      ? resEntries.map(([key, val], i) => {
-          const resInfo = this.resourcesData?.resources[key];
-          return `<div class="summary-res summary-row" style="animation-delay: ${0.5 + i * 0.1}s"><span style="color:${resInfo?.color || '#aaa'}">${resInfo?.name || key}</span><span class="summary-val">${formatNumber(val)}</span></div>`;
-        }).join('')
-      : '<div style="color:var(--text-dim)" class="summary-row" style="animation-delay: 0.5s">No resources</div>';
-
-    content.innerHTML = `
-      <div class="summary-row" style="animation-delay: 0.1s"><span>Destroyed</span><span class="summary-val">${summary.asteroidsDestroyed}</span></div>
-      <div class="summary-row" style="animation-delay: 0.2s"><span>Max Combo</span><span class="summary-val gold">x${summary.maxCombo}</span></div>
-      <div class="summary-row" style="animation-delay: 0.3s"><span>XP</span><span class="summary-val blue">${formatNumber(Math.floor(summary.xpGained))}</span></div>
-      <div class="summary-row" style="animation-delay: 0.4s"><span>Run Score</span><span class="summary-val gold">${formatNumber(Math.floor(summary.score))}</span></div>
-      <div class="summary-title" style="margin-top:16px;">Resources</div>
-      ${resHTML}
-    `;
-    panel.style.display = 'flex';
-  }
-
-  _updateEquipmentDisplay() {
-    const equipment = document.getElementById('ui-equipment');
-    if (equipment) {
-      const currentGalaxy = this.galaxy.getCurrent();
-      equipment.textContent = `${currentGalaxy?.name || 'Unknown Sector'} // RUN ${this.gs.baseExpeditionTime + this.gs.expeditionTimeBonus}s`;
+    const successful = Boolean(summary.success && summary.bossDefeated);
+    if (title) {
+      title.textContent = successful ? 'ZONE CLEARED' : 'RUN FAILED';
     }
 
-    const clickDmg = document.getElementById('ui-click-dmg');
-    if (clickDmg) clickDmg.textContent = formatNumber(Math.floor(this.clickDamage));
+    const asteroidResources = Math.max(0, Math.floor(summary.resourcesFromAsteroids || 0));
+    const enemyResources = Math.max(0, Math.floor(summary.resourcesFromEnemies || 0));
+    const bossResources = Math.max(0, Math.floor(summary.resourcesFromBoss || 0));
+    const totalResources = Math.max(0, Math.floor(summary.resourcesCollected || 0));
+    const retainedResources = successful
+      ? totalResources
+      : Math.floor(totalResources * 0.25);
+
+    content.innerHTML = `
+      <div class="summary-row"><span>Zone</span><span class="summary-val">${summary.zoneName || `Zone ${summary.zoneIndex + 1}`}</span></div>
+      <div class="summary-row"><span>Status</span><span class="summary-val ${successful ? 'green' : 'red'}">${successful ? 'Boss defeated' : 'Retained 25% on fail'}</span></div>
+      <div class="summary-row"><span>Asteroids</span><span class="summary-val">${formatNumber(asteroidResources)}</span></div>
+      <div class="summary-row"><span>Enemies</span><span class="summary-val">${formatNumber(enemyResources)}</span></div>
+      <div class="summary-row"><span>Boss</span><span class="summary-val gold">${formatNumber(bossResources)}</span></div>
+      <div class="summary-row"><span>Total Resources</span><span class="summary-val">${formatNumber(totalResources)}</span></div>
+      <div class="summary-row"><span>Retained</span><span class="summary-val gold">+${formatNumber(retainedResources)} ${this.resourcesData?.resources.resources?.name || 'resources'}</span></div>
+      <div class="summary-row"><span>Destroyed</span><span class="summary-val">${summary.asteroidsDestroyed}</span></div>
+      <div class="summary-row"><span>Max Combo</span><span class="summary-val gold">x${summary.maxCombo}</span></div>
+      <div class="summary-row"><span>XP</span><span class="summary-val blue">${formatNumber(Math.floor(summary.xpGained))}</span></div>
+      <div class="summary-row"><span>Run Score</span><span class="summary-val gold">${formatNumber(Math.floor(summary.score))}</span></div>
+    `;
+    panel.classList.add('active');
   }
 
   _togglePause() {
     this.running = !this.running;
     const overlay = document.getElementById('pause-overlay');
-    if (overlay) overlay.style.display = this.running ? 'none' : 'flex';
+    if (overlay) overlay.classList.toggle('active', !this.running);
   }
 }

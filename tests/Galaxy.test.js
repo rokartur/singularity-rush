@@ -5,45 +5,36 @@ import galaxies from '../js/data/galaxies.js';
 import { GameState } from '../js/game/GameState.js';
 
 describe('Galaxy', () => {
-  it('requires sequential unlocks and enough resources', () => {
+  it('requires sequential unlocks', () => {
     const gs = new GameState();
     const galaxy = new Galaxy(gs);
     galaxy.loadData(galaxies);
 
-    expect(galaxy.canUnlock(1)).toBe(false);
-    gs.resources.iron = 180;
-    gs.resources.nickel = 90;
     expect(galaxy.canUnlock(1)).toBe(true);
     expect(galaxy.canUnlock(2)).toBe(false);
   });
 
-  it('unlocks the next galaxy, spends resources, and marks the previous galaxy completed', () => {
+  it('unlocks the next galaxy and marks the previous galaxy completed', () => {
     const gs = new GameState();
     const events = [];
     const galaxy = new Galaxy(gs);
     galaxy.loadData(galaxies);
-    gs.resources.iron = 240;
-    gs.resources.nickel = 100;
     gs.on('galaxyUnlocked', (payload) => events.push(payload.index));
 
     expect(galaxy.unlock(1)).toBe(true);
     gs.flushNotifications();
 
     expect(gs.currentGalaxyIndex).toBe(1);
-    expect(gs.resources.iron).toBe(60);
-    expect(gs.resources.nickel).toBe(10);
     expect(gs.unlockedGalaxies).toEqual([0, 1]);
     expect(gs.completedGalaxies).toEqual([0]);
     expect(events).toEqual([1]);
   });
 
-  it('keeps already unlocked galaxies free to revisit without making the next one free', () => {
+  it('keeps already unlocked galaxies revisitable without unlocking deeper zones early', () => {
     const gs = new GameState();
     const galaxy = new Galaxy(gs);
     galaxy.loadData(galaxies);
 
-    gs.resources.iron = 240;
-    gs.resources.nickel = 100;
     expect(galaxy.unlock(1)).toBe(true);
     gs.flushNotifications();
 
@@ -51,20 +42,20 @@ describe('Galaxy', () => {
     gs.flushNotifications();
 
     expect(galaxy.canUnlock(1)).toBe(true);
-    expect(galaxy.canUnlock(2)).toBe(false);
-
-    gs.resources.helium3 = 120;
-    gs.resources.star_crystal = 60;
     expect(galaxy.canUnlock(2)).toBe(true);
   });
 
   it('spawns and resolves boss progression with rewards', () => {
     const gs = new GameState();
     const events = [];
+    let bossReward = null;
     const galaxy = new Galaxy(gs);
     galaxy.loadData(galaxies);
     gs.on('bossSpawn', () => events.push('spawn'));
-    gs.on('bossDefeated', () => events.push('defeat'));
+    gs.on('bossDefeated', ({ reward }) => {
+      events.push('defeat');
+      bossReward = reward;
+    });
 
     galaxy.addBossProgress(100);
     gs.flushNotifications();
@@ -76,8 +67,7 @@ describe('Galaxy', () => {
     gs.flushNotifications();
 
     expect(events).toEqual(['spawn', 'defeat']);
-    expect(gs.resources.iron).toBe(90);
-    expect(gs.resources.nickel).toBe(35);
+    expect(bossReward?.resources).toBe(125);
     expect(gs.statistics.bossesKilled).toBe(1);
     expect(galaxy.getBossProgress().active).toBe(false);
   });

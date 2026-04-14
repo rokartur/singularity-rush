@@ -1,7 +1,11 @@
 export class SkillTree {
-  constructor(gameState) {
-    this.gs = gameState;
+  constructor(metaState = null) {
+    this.meta = metaState;
     this.data = null;
+  }
+
+  bindMetaState(metaState) {
+    this.meta = metaState;
   }
 
   loadData(skillData) {
@@ -16,64 +20,88 @@ export class SkillTree {
     return this.getNodes().find((node) => node.id === nodeId) || null;
   }
 
-  getNodeLevel(nodeId) {
-    return this.gs.skillLevels[nodeId] || 0;
+  isPurchased(nodeId) {
+    return this.meta?.isSkillNodePurchased?.(nodeId) || false;
+  }
+
+  getPurchasedNodes() {
+    return this.getNodes().filter((node) => this.isPurchased(node.id));
   }
 
   getNodeCost(nodeId) {
-    const node = this.getNode(nodeId);
-    if (!node) return Infinity;
-    const level = this.getNodeLevel(nodeId);
-    return Math.floor(node.baseCost * Math.pow(node.costScale || 1, level));
+    return this.getNode(nodeId)?.cost ?? Infinity;
   }
 
-  canUnlock(nodeId) {
+  getMissingPrerequisites(nodeId) {
     const node = this.getNode(nodeId);
-    if (!node) return false;
-    if (this.getNodeLevel(nodeId) >= node.maxLevel) return false;
-    if ((this.gs.resources[node.costResource] || 0) < this.getNodeCost(nodeId)) return false;
-    for (const req of (node.requires || [])) {
-      if (this.getNodeLevel(req) <= 0) return false;
+    if (!node) return [];
+
+    return (node.prerequisites || []).filter((prerequisiteId) => !this.isPurchased(prerequisiteId));
+  }
+
+  canPurchase(nodeId) {
+    const node = this.getNode(nodeId);
+    if (!node || !this.meta) return false;
+    if (this.isPurchased(nodeId)) return false;
+    if (!this.meta.canAffordResources(node.cost)) return false;
+    if (this.getMissingPrerequisites(nodeId).length > 0) return false;
+
+    const requiredZones = node.requiredZonesCleared || [];
+    if (requiredZones.some((zoneIndex) => !this.meta.isSectorCompleted(zoneIndex))) {
+      return false;
     }
+
     return true;
   }
 
-  unlock(nodeId) {
-    if (!this.canUnlock(nodeId)) return false;
+  purchase(nodeId) {
+    if (!this.canPurchase(nodeId)) return false;
+
     const node = this.getNode(nodeId);
-    const cost = this.getNodeCost(nodeId);
-    if (!this.gs.removeResource(node.costResource, cost)) return false;
-    this.gs.skillLevels[nodeId] = (this.gs.skillLevels[nodeId] || 0) + 1;
-    this.gs.emit('skillUpgraded', {
-      nodeId,
-      level: this.getNodeLevel(nodeId),
-      cost,
-      resource: node.costResource
-    });
+    if (!node || !this.meta?.spendResources(node.cost)) return false;
+
+    this.meta.addPurchasedSkillNode(nodeId);
+
+    if (node.effectType === 'unlock_weapon') {
+      this.meta.unlockWeapon(node.effectValue);
+    }
+
+    if (node.effectType === 'unlock_module') {
+      this.meta.unlockModule(node.effectValue);
+    }
+
+    if (node.effectType === 'unlock_system') {
+      this.meta.unlockSystem(node.effectValue);
+    }
+
+    this.meta.emit('skillTreeChanged', { nodeId, node });
     return true;
   }
 
-  getTotalEffect(effectType) {
-    let total = 0;
-    for (const node of this.getNodes()) {
-      const level = this.getNodeLevel(node.id);
-      if (level > 0 && node.effect.type === effectType) {
-        total += node.effect.value * level;
+  getTotalEffect(statKey) {
+    return this.getPurchasedNodes().reduce((total, node) => {
+      if (node.effectType !== 'stat' || node.effectKey !== statKey) {
+        return total;
       }
-    }
-    return total;
+
+      return total + (node.effectValue || 0);
+    }, 0);
+  }
+
+  getUnlockedContentIds(effectType) {
+    return this.getPurchasedNodes()
+      .filter((node) => node.effectType === effectType)
+      .map((node) => node.effectValue);
   }
 
   getNodeState(nodeId) {
     const node = this.getNode(nodeId);
-    const level = this.getNodeLevel(nodeId);
     return {
       node,
-      level,
-      canUnlock: this.canUnlock(nodeId),
-      isOwned: level > 0,
-      isMaxed: level >= (node?.maxLevel || 0),
-      cost: this.getNodeCost(nodeId)
+      isPurchased: this.isPurchased(nodeId),
+      canPurchase: this.canPurchase(nodeId),
+      cost: node?.cost ?? Infinity,
+      missingPrerequisites: this.getMissingPrerequisites(nodeId)
     };
   }
 }

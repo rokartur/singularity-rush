@@ -42,13 +42,24 @@ export class Galaxy {
     return this.gs.unlockedGalaxies.includes(index);
   }
 
+  travel(index) {
+    if (index < 0 || index >= this.galaxies.length) return false;
+    if (!this.isUnlocked(index)) return false;
+
+    this.gs.currentGalaxyIndex = index;
+    this._updateCurrent();
+    this.bossResourcesCollected = 0;
+    this.bossActive = false;
+    this._syncBossProgress();
+    this.gs.emit('galaxyTraveled', { index, data: this.currentData });
+    return true;
+  }
+
   canUnlock(index) {
     if (index < 0 || index >= this.galaxies.length) return false;
     if (this.isUnlocked(index)) return true;
     const highest = this.getHighestUnlocked();
-    if (index > highest + 1) return false;
-    const unlockCost = this.galaxies[index].unlockCost || {};
-    return Object.entries(unlockCost).every(([resourceId, amount]) => (this.gs.resources[resourceId] || 0) >= amount);
+    return index <= highest + 1;
   }
 
   unlock(index) {
@@ -57,12 +68,6 @@ export class Galaxy {
     const isNewUnlock = !this.isUnlocked(index);
 
     if (isNewUnlock) {
-      const cost = this.galaxies[index].unlockCost || {};
-      for (const [resourceId, amount] of Object.entries(cost)) {
-        if (!this.gs.removeResource(resourceId, amount)) {
-          return false;
-        }
-      }
       this.gs.completeGalaxy(index - 1);
       this.gs.unlockGalaxy(index);
     }
@@ -97,10 +102,12 @@ export class Galaxy {
     this.bossActive = false;
     this.bossResourcesCollected = 0;
     this._syncBossProgress();
-    const reward = this.currentData.boss.reward;
-    for (const [resourceId, amount] of Object.entries(reward.resources || {})) {
-      this.gs.addResource(resourceId, amount);
-    }
+    const legacyBossResources = Object.values(this.currentData.boss.reward?.resources || {})
+      .reduce((total, amount) => total + Math.max(0, Math.floor(amount || 0)), 0);
+    const reward = {
+      ...(this.currentData.boss.reward || {}),
+      resources: Math.max(0, Math.floor(this.currentData.resourceReward ?? legacyBossResources ?? 0))
+    };
     this.gs.recordBossKilled(this.gs.currentGalaxyIndex);
     this.gs.addXP(reward.xp || 50);
     this.gs.emit('bossDefeated', { reward });

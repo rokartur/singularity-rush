@@ -1,9 +1,10 @@
-const SAVE_VERSION = '3.0.0';
+const SAVE_VERSION = '6.0.0';
 const STORAGE_KEY = 'singularity_rush_save';
 
 export class SaveManager {
-  constructor(gameState) {
+  constructor(gameState, metaState) {
     this.gs = gameState;
+    this.ms = metaState;
     this.autoSaveInterval = 30000;
     this.autoSaveTimer = 0;
   }
@@ -32,7 +33,8 @@ export class SaveManager {
       baseExpeditionTime: this.gs.baseExpeditionTime,
       expeditionTimeBonus: this.gs.expeditionTimeBonus,
       statistics: { ...this.gs.statistics },
-      combo: { count: this.gs.combo.count, bestCombo: this.gs.combo.bestCombo }
+      combo: { count: this.gs.combo.count, bestCombo: this.gs.combo.bestCombo },
+      meta: this.ms ? this.ms.serialize() : null
     };
     return JSON.stringify(data);
   }
@@ -117,7 +119,7 @@ export class SaveManager {
   }
 
   _migrateToV3(data) {
-    const migrated = { ...data, version: SAVE_VERSION };
+    const migrated = { ...data, version: '3.0.0' };
     const mapping = {
       l_power_1: 'iron_lattice',
       l_power_2: 'neutron_driver',
@@ -155,13 +157,91 @@ export class SaveManager {
     return migrated;
   }
 
+  _migrateToV4(data) {
+    const migrated = { ...data, version: '4.0.0' };
+    // Derive meta state from existing save data
+    migrated.meta = {
+      day: 1 + (data.statistics?.expeditionRuns ?? 0),
+      runCount: data.statistics?.expeditionRuns ?? 0,
+      selectedSectorIndex: data.galaxy ?? 0,
+      unlockedSectors: data.unlockedGalaxies ?? [0],
+      completedSectors: data.completedGalaxies ?? [],
+      ownedWeapons: ['basic_laser'],
+      equippedWeapons: ['basic_laser', null],
+      utilitySlots: [null],
+      activeTasks: [],
+      completedTaskCount: 0,
+      shopOffers: [],
+      shopRerollsFree: 1,
+      shopRerollsPaid: 0,
+      shopSeed: Math.floor(Math.random() * 2147483647),
+      ownedBuffs: []
+    };
+    return migrated;
+  }
+
+  _migrateToV5(data) {
+    const legacyMeta = data.meta || {};
+
+    return {
+      ...data,
+      version: SAVE_VERSION,
+      meta: {
+        day: legacyMeta.day ?? 1 + (data.statistics?.expeditionRuns ?? 0),
+        runCount: legacyMeta.runCount ?? data.statistics?.expeditionRuns ?? 0,
+        metaCurrency: legacyMeta.metaCurrency ?? 0,
+        selectedZone: legacyMeta.selectedZone ?? legacyMeta.selectedSectorIndex ?? data.galaxy ?? 0,
+        unlockedZones: legacyMeta.unlockedZones ?? legacyMeta.unlockedSectors ?? data.unlockedGalaxies ?? [0],
+        clearedZones: legacyMeta.clearedZones ?? legacyMeta.completedSectors ?? data.completedGalaxies ?? [],
+        purchasedSkillNodes: legacyMeta.purchasedSkillNodes ?? [],
+        unlockedWeapons: legacyMeta.unlockedWeapons ?? legacyMeta.ownedWeapons ?? ['basic_laser'],
+        unlockedModules: legacyMeta.unlockedModules ?? [],
+        unlockedSystems: legacyMeta.unlockedSystems ?? [],
+        equippedWeapons: legacyMeta.equippedWeapons ?? ['basic_laser', null],
+        utilitySlots: legacyMeta.utilitySlots ?? [null]
+      }
+    };
+  }
+
+  _migrateToV6(data) {
+    const legacyMeta = data.meta || {};
+
+    return {
+      ...data,
+      version: SAVE_VERSION,
+      resources: {
+        resources: Math.max(0, Math.floor(data.resources?.resources ?? 0))
+      },
+      meta: {
+        ...legacyMeta,
+        resources: Math.max(0, Math.floor(legacyMeta.resources ?? legacyMeta.metaCurrency ?? 0))
+      }
+    };
+  }
+
   loadFromData(data) {
     let saveData = data;
-    if (data.version && data.version.startsWith('1')) {
+    const versionMajor = Number.parseInt(String(saveData.version || '0').split('.')[0], 10) || 0;
+
+    if (versionMajor === 1) {
       saveData = this._migrateV1toV2(data);
     }
-    if (!saveData.version || !saveData.version.startsWith('3')) {
+    const normalizedMajor = Number.parseInt(String(saveData.version || '0').split('.')[0], 10) || 0;
+
+    if (normalizedMajor < 3) {
       saveData = this._migrateToV3(saveData);
+    }
+    const afterV3Major = Number.parseInt(String(saveData.version || '0').split('.')[0], 10) || 0;
+    if (afterV3Major < 4) {
+      saveData = this._migrateToV4(saveData);
+    }
+    const afterV4Major = Number.parseInt(String(saveData.version || '0').split('.')[0], 10) || 0;
+    if (afterV4Major < 5) {
+      saveData = this._migrateToV5(saveData);
+    }
+    const afterV5Major = Number.parseInt(String(saveData.version || '0').split('.')[0], 10) || 0;
+    if (afterV5Major < 6) {
+      saveData = this._migrateToV6(saveData);
     }
 
     const completedGalaxies = saveData.completedGalaxies ?? [];
@@ -178,7 +258,9 @@ export class SaveManager {
     this.gs.prestigeLevel = saveData.prestige_level ?? 0;
     this.gs.level = level;
     this.gs.xp = saveData.xp ?? 0;
-    this.gs.resources = saveData.resources ?? { iron: 0, nickel: 0 };
+    this.gs.resources = {
+      resources: Math.max(0, Math.floor(saveData.resources?.resources ?? 0))
+    };
     this.gs.maxHp = saveData.maxHp ?? derivedMaxHp;
     this.gs.hp = Math.min(saveData.hp ?? this.gs.maxHp, this.gs.maxHp);
     this.gs.shield = saveData.shield ?? 0;
@@ -199,6 +281,18 @@ export class SaveManager {
     if (saveData.combo) {
       this.gs.combo.count = saveData.combo.count ?? 0;
       this.gs.combo.bestCombo = saveData.combo.bestCombo ?? 0;
+    }
+
+    if (this.ms && saveData.meta) {
+      this.ms.deserialize(saveData.meta);
+    } else if (this.ms) {
+      this.ms.deserialize(this._migrateToV5(saveData).meta);
+    }
+
+    if (this.ms) {
+      this.gs.currentGalaxyIndex = this.ms.selectedSectorIndex;
+      this.gs.unlockedGalaxies = [...this.ms.unlockedSectors];
+      this.gs.completedGalaxies = [...this.ms.completedSectors];
     }
   }
 
